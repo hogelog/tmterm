@@ -1,7 +1,55 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { IPty, spawn } from 'node-pty'
 import icon from '../../resources/icon.png?asset'
+
+const terminalProcesses = new Map<number, IPty>()
+
+function getShell(): string {
+  if (process.platform === 'win32') {
+    return process.env['COMSPEC'] || 'powershell.exe'
+  }
+
+  return process.env['SHELL'] || '/bin/zsh'
+}
+
+function createTerminal(window: BrowserWindow): void {
+  const webContentsId = window.webContents.id
+  terminalProcesses.get(webContentsId)?.kill()
+
+  const terminal = spawn(getShell(), [], {
+    name: 'xterm-256color',
+    cols: 80,
+    rows: 24,
+    cwd: homedir(),
+    env: process.env
+  })
+
+  terminal.onData((data) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('terminal:data', data)
+    }
+  })
+
+  terminal.onExit(() => {
+    terminalProcesses.delete(webContentsId)
+  })
+
+  terminalProcesses.set(webContentsId, terminal)
+}
+
+function disposeTerminal(webContentsId: number): void {
+  const terminal = terminalProcesses.get(webContentsId)
+
+  if (!terminal) {
+    return
+  }
+
+  terminal.kill()
+  terminalProcesses.delete(webContentsId)
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -19,6 +67,10 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  mainWindow.on('closed', () => {
+    disposeTerminal(mainWindow.webContents.id)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -49,8 +101,28 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  ipcMain.handle('terminal:start', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+
+    if (window) {
+      createTerminal(window)
+    }
+  })
+
+  ipcMain.on('terminal:write', (event, data: string) => {
+    terminalProcesses.get(event.sender.id)?.write(data)
+  })
+
+  ipcMain.on('terminal:resize', (event, size: { cols: number; rows: number }) => {
+    const cols = Math.max(1, Math.floor(size.cols))
+    const rows = Math.max(1, Math.floor(size.rows))
+
+    terminalProcesses.get(event.sender.id)?.resize(cols, rows)
+  })
+
+  ipcMain.on('terminal:dispose', (event) => {
+    disposeTerminal(event.sender.id)
+  })
 
   createWindow()
 
