@@ -1,10 +1,18 @@
 {
   "name": "tmterm",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "A terminal application built with Electron, xterm.js, and node-pty",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "hogelog",
+  "license": "MIT",
+  "homepage": "https://github.com/hogelog/tmterm#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hogelog/tmterm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hogelog/tmterm/issues"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
