@@ -10,6 +10,9 @@ const api = {
       ipcRenderer.send('terminal:resize', { cols, rows })
     },
     dispose: (): void => ipcRenderer.send('terminal:dispose'),
+    setComposing: (isComposing: boolean): void => {
+      ipcRenderer.send('terminal:composition', isComposing)
+    },
     onData: (callback: (data: string) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: string): void => callback(data)
 

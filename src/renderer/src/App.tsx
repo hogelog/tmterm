@@ -48,6 +48,10 @@ function keyEventToTerminalInput(
     case 'PageDown':
       return '\x1b[6~'
     default:
+      if (!event.ctrlKey && !event.altKey && event.key.length === 1) {
+        return event.key
+      }
+
       return undefined
   }
 }
@@ -65,10 +69,19 @@ function App(): React.JSX.Element {
         'Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Courier New", monospace',
       fontSize: 13,
       theme: {
-        background: '#101214',
-        foreground: '#e5e7eb',
-        cursor: '#f8fafc',
-        selectionBackground: '#475569'
+        background: '#0c0f10',
+        foreground: '#d8dee9',
+        cursor: '#d8dee9',
+        selectionBackground: '#3b4252',
+        black: '#0c0f10',
+        blue: '#5e81ac',
+        brightBlue: '#81a1c1',
+        brightWhite: '#eceff4',
+        cyan: '#88c0d0',
+        green: '#a3be8c',
+        red: '#bf616a',
+        white: '#d8dee9',
+        yellow: '#ebcb8b'
       }
     })
     const fitAddon = new FitAddon()
@@ -160,23 +173,25 @@ function App(): React.JSX.Element {
   const handleBeforeInput = (event: React.FormEvent<HTMLTextAreaElement>): void => {
     const nativeEvent = event.nativeEvent as InputEvent
 
+    event.preventDefault()
+
     if (isComposingRef.current || nativeEvent.isComposing || !nativeEvent.data) {
       return
     }
 
-    event.preventDefault()
-    window.api.terminal.write(nativeEvent.data)
     event.currentTarget.value = ''
   }
 
   const handleCompositionStart = (): void => {
     isComposingRef.current = true
     setIsComposing(true)
+    window.api.terminal.setComposing(true)
   }
 
   const handleCompositionEnd = (event: React.CompositionEvent<HTMLTextAreaElement>): void => {
     isComposingRef.current = false
     setIsComposing(false)
+    window.api.terminal.setComposing(false)
 
     const value = event.currentTarget.value
 
@@ -196,7 +211,7 @@ function App(): React.JSX.Element {
     }
 
     event.preventDefault()
-    window.api.terminal.write(input)
+    event.currentTarget.value = ''
   }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {

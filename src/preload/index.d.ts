@@ -5,6 +5,7 @@ interface TerminalAPI {
   write: (data: string) => void
   resize: (cols: number, rows: number) => void
   dispose: () => void
+  setComposing: (isComposing: boolean) => void
   onData: (callback: (data: string) => void) => () => void
 }
 

@@ -9,7 +9,7 @@ body,
 
 body {
   overflow: hidden;
-  background: #101214;
+  background: #0c0f10;
   user-select: text;
 }
 
@@ -26,8 +26,7 @@ body {
 .terminal {
   width: 100%;
   height: 100%;
-  padding: 10px;
-  background: #101214;
+  background: #0c0f10;
 }
 
 .terminal-input {
@@ -49,12 +48,14 @@ body {
 }
 
 .terminal-input.is-composing {
-  color: #e5e7eb;
-  background: #101214;
+  color: #d8dee9;
+  background: #0c0f10;
 }
 
 .xterm {
   height: 100%;
+  padding: 8px;
+  background: #0c0f10;
 }
 
 .xterm-viewport,

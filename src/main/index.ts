@@ -6,6 +6,58 @@ import { IPty, spawn } from 'node-pty'
 import icon from '../../resources/icon.png?asset'
 
 const terminalProcesses = new Map<number, IPty>()
+const composingWebContents = new Set<number>()
+
+function inputEventToTerminalInput(input: Electron.Input): string | undefined {
+  if (input.type !== 'keyDown' || input.meta) {
+    return undefined
+  }
+
+  if (input.control && input.key.length === 1) {
+    const charCode = input.key.toUpperCase().charCodeAt(0)
+
+    if (charCode >= 64 && charCode <= 95) {
+      return String.fromCharCode(charCode - 64)
+    }
+  }
+
+  switch (input.key) {
+    case ' ':
+      return ' '
+    case 'Enter':
+      return '\r'
+    case 'Backspace':
+      return '\x7f'
+    case 'Tab':
+      return '\t'
+    case 'Escape':
+      return '\x1b'
+    case 'ArrowUp':
+      return '\x1b[A'
+    case 'ArrowDown':
+      return '\x1b[B'
+    case 'ArrowRight':
+      return '\x1b[C'
+    case 'ArrowLeft':
+      return '\x1b[D'
+    case 'Home':
+      return '\x1b[H'
+    case 'End':
+      return '\x1b[F'
+    case 'Delete':
+      return '\x1b[3~'
+    case 'PageUp':
+      return '\x1b[5~'
+    case 'PageDown':
+      return '\x1b[6~'
+    default:
+      if (!input.control && !input.alt && input.key.length === 1) {
+        return input.key
+      }
+
+      return undefined
+  }
+}
 
 function getShell(): string {
   if (process.platform === 'win32') {
@@ -71,6 +123,22 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     disposeTerminal(mainWindow.webContents.id)
+    composingWebContents.delete(mainWindow.webContents.id)
+  })
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (composingWebContents.has(mainWindow.webContents.id)) {
+      return
+    }
+
+    const data = inputEventToTerminalInput(input)
+
+    if (!data) {
+      return
+    }
+
+    event.preventDefault()
+    terminalProcesses.get(mainWindow.webContents.id)?.write(data)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -122,6 +190,14 @@ app.whenReady().then(() => {
 
   ipcMain.on('terminal:dispose', (event) => {
     disposeTerminal(event.sender.id)
+  })
+
+  ipcMain.on('terminal:composition', (event, isComposing: boolean) => {
+    if (isComposing) {
+      composingWebContents.add(event.sender.id)
+    } else {
+      composingWebContents.delete(event.sender.id)
+    }
   })
 
   createWindow()
