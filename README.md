@@ -1,34 +1,26 @@
 # tmterm
 
-An Electron application with React and TypeScript
+tmterm is a native macOS terminal prototype built with SwiftTerm.
 
-## Recommended IDE Setup
+## Requirements
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+- macOS
+- Swift 5.9 or later
+- Xcode Command Line Tools
 
-## Project Setup
+## Development
 
-### Install
+Build the app:
 
-```bash
-$ pnpm install
+```sh
+swift build
 ```
 
-### Development
+Run the app:
 
-```bash
-$ pnpm dev
+```sh
+swift run tmterm
 ```
 
-### Build
-
-```bash
-# For windows
-$ pnpm build:win
-
-# For macOS
-$ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
-```
+tmterm opens the user's login shell in a native AppKit window using SwiftTerm's
+`LocalProcessTerminalView`.

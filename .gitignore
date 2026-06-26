@@ -1,6 +1,8 @@
 node_modules
 dist
 out
+.build
+.swiftpm
+DerivedData
 .DS_Store
-.eslintcache
 *.log*
