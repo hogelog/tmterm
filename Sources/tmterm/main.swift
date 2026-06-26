@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   private let defaultFontSize: CGFloat = NSFont.systemFontSize
   private let minimumFontSize: CGFloat = 8
   private let maximumFontSize: CGFloat = 32
+  private var isWaitingForTabShortcut = false
+  private var tabShortcutMonitor: Any?
   private var tabRefreshTimer: Timer?
   private var tmuxExecutable: String?
   private var window: NSWindow?
@@ -60,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     NSApp.activate(ignoringOtherApps: true)
     window.makeFirstResponder(terminalView)
     startTmux()
+    installTabShortcutMonitor()
     refreshTabs()
     tabRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
       self?.refreshTabs()
@@ -67,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    if let tabShortcutMonitor {
+      NSEvent.removeMonitor(tabShortcutMonitor)
+    }
     tabRefreshTimer?.invalidate()
     terminalView?.terminate()
   }
@@ -144,6 +150,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     let clampedSize = min(max(size, minimumFontSize), maximumFontSize)
     terminalView.font = NSFont.monospacedSystemFont(ofSize: clampedSize, weight: .regular)
     terminalView.needsDisplay = true
+  }
+
+  private func installTabShortcutMonitor() {
+    tabShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self else {
+        return event
+      }
+
+      return self.handleTabShortcut(event) ? nil : event
+    }
+  }
+
+  private func handleTabShortcut(_ event: NSEvent) -> Bool {
+    guard
+      terminalView?.window?.isKeyWindow == true,
+      terminalView?.window?.firstResponder === terminalView
+    else {
+      isWaitingForTabShortcut = false
+      return false
+    }
+
+    if isWaitingForTabShortcut {
+      isWaitingForTabShortcut = false
+
+      if event.matchesShortcutKey("h") {
+        selectAdjacentTmuxWindow(offset: -1)
+        return true
+      }
+
+      if event.matchesShortcutKey("l") {
+        selectAdjacentTmuxWindow(offset: 1)
+        return true
+      }
+
+      return false
+    }
+
+    if event.modifierFlags.normalized.contains(.control), event.matchesShortcutKey("e") {
+      isWaitingForTabShortcut = true
+      return true
+    }
+
+    return false
   }
 
   private func findTmuxExecutable() -> String? {
@@ -234,6 +283,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
+  private func selectAdjacentTmuxWindow(offset: Int) {
+    let windows = contentView?.tmuxWindows ?? []
+    guard
+      let activePosition = windows.firstIndex(where: { $0.isActive }),
+      !windows.isEmpty
+    else {
+      return
+    }
+
+    let nextPosition = (activePosition + offset + windows.count) % windows.count
+    selectTmuxWindow(index: windows[nextPosition].index)
+  }
+
   private func createTmuxWindow() {
     runTmux(arguments: ["new-window", "-t", tmuxSessionName])
     refreshTabs()
@@ -298,12 +360,37 @@ struct TmuxWindow: Equatable {
   let name: String
 }
 
+private extension NSEvent {
+  func matchesShortcutKey(_ key: String) -> Bool {
+    if charactersIgnoringModifiers?.lowercased() == key {
+      return true
+    }
+
+    return keyCode == Self.shortcutKeyCodes[key]
+  }
+
+  private static let shortcutKeyCodes: [String: UInt16] = [
+    "e": 14,
+    "h": 4,
+    "l": 37
+  ]
+}
+
+private extension NSEvent.ModifierFlags {
+  var normalized: NSEvent.ModifierFlags {
+    intersection(.deviceIndependentFlagsMask)
+  }
+}
+
 final class TerminalContainerView: NSView {
   private let terminalView: LocalProcessTerminalView
   private let tabBar = NSStackView()
   private let padding: CGFloat = 8
   private let tabBarHeight: CGFloat = 34
   private var windows: [TmuxWindow] = []
+  var tmuxWindows: [TmuxWindow] {
+    windows
+  }
   var onSelectTab: ((Int) -> Void)?
   var onNewTab: (() -> Void)?
 
