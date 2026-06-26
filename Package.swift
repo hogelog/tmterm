@@ -11,7 +11,7 @@ let package = Package(
     .executable(name: "tmterm", targets: ["tmterm"])
   ],
   dependencies: [
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", branch: "main")
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.13.0")
   ],
   targets: [
     .executableTarget(
