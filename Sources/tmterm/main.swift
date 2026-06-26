@@ -2,10 +2,15 @@ import AppKit
 import SwiftTerm
 
 final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
+  private let defaultFontSize: CGFloat = NSFont.systemFontSize
+  private let minimumFontSize: CGFloat = 8
+  private let maximumFontSize: CGFloat = 32
   private var window: NSWindow?
   private var terminalView: LocalProcessTerminalView?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    configureMenu()
+
     let terminalView = LocalProcessTerminalView(frame: .zero)
     terminalView.processDelegate = self
     terminalView.autoresizingMask = [.width, .height]
@@ -68,6 +73,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
 
   func processTerminated(source: TerminalView, exitCode: Int32?) {
     source.feed(text: "\r\n[process exited]\r\n")
+  }
+
+  @objc private func increaseFontSize(_ sender: Any?) {
+    changeFontSize(by: 1)
+  }
+
+  @objc private func decreaseFontSize(_ sender: Any?) {
+    changeFontSize(by: -1)
+  }
+
+  @objc private func resetFontSize(_ sender: Any?) {
+    setFontSize(defaultFontSize)
+  }
+
+  private func changeFontSize(by delta: CGFloat) {
+    guard let terminalView else {
+      return
+    }
+
+    setFontSize(terminalView.font.pointSize + delta)
+  }
+
+  private func setFontSize(_ size: CGFloat) {
+    guard let terminalView else {
+      return
+    }
+
+    let clampedSize = min(max(size, minimumFontSize), maximumFontSize)
+    terminalView.font = NSFont.monospacedSystemFont(ofSize: clampedSize, weight: .regular)
+    terminalView.needsDisplay = true
+  }
+
+  private func configureMenu() {
+    let mainMenu = NSMenu()
+    let appMenuItem = NSMenuItem()
+    let viewMenuItem = NSMenuItem()
+    mainMenu.addItem(appMenuItem)
+    mainMenu.addItem(viewMenuItem)
+
+    let appMenu = NSMenu()
+    appMenu.addItem(
+      NSMenuItem(
+        title: "Quit tmterm",
+        action: #selector(NSApplication.terminate(_:)),
+        keyEquivalent: "q"
+      )
+    )
+    appMenuItem.submenu = appMenu
+
+    let viewMenu = NSMenu(title: "View")
+    viewMenu.addItem(
+      NSMenuItem(
+        title: "Increase Font Size",
+        action: #selector(increaseFontSize(_:)),
+        keyEquivalent: "+"
+      )
+    )
+    let increaseFontSizeAlternate = NSMenuItem(
+      title: "Increase Font Size",
+      action: #selector(increaseFontSize(_:)),
+      keyEquivalent: "="
+    )
+    increaseFontSizeAlternate.isAlternate = true
+    viewMenu.addItem(increaseFontSizeAlternate)
+    viewMenu.addItem(
+      NSMenuItem(
+        title: "Decrease Font Size",
+        action: #selector(decreaseFontSize(_:)),
+        keyEquivalent: "-"
+      )
+    )
+    viewMenu.addItem(
+      NSMenuItem(
+        title: "Reset Font Size",
+        action: #selector(resetFontSize(_:)),
+        keyEquivalent: "0"
+      )
+    )
+    viewMenuItem.submenu = viewMenu
+
+    NSApp.mainMenu = mainMenu
   }
 }
 
