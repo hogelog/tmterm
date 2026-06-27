@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   private let maximumFontSize: CGFloat = 32
   private var isWaitingForTabShortcut = false
   private var tabShortcutMonitor: Any?
+  private var scrollWheelMonitor: Any?
   private var tabRefreshTimer: Timer?
   private var tmuxExecutable: String?
   private var window: NSWindow?
@@ -76,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     window.makeFirstResponder(terminalView)
     startTmux()
     installTabShortcutMonitor()
+    installScrollWheelMonitor()
     refreshTabs()
     tabRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
       self?.refreshTabs()
@@ -86,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     saveWindowFrame()
     if let tabShortcutMonitor {
       NSEvent.removeMonitor(tabShortcutMonitor)
+    }
+    if let scrollWheelMonitor {
+      NSEvent.removeMonitor(scrollWheelMonitor)
     }
     tabRefreshTimer?.invalidate()
     terminalView?.terminate()
@@ -240,6 +245,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     }
   }
 
+  private func installScrollWheelMonitor() {
+    scrollWheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+      guard
+        let self,
+        self.terminalView?.window?.isKeyWindow == true,
+        self.terminalView?.window?.firstResponder === self.terminalView,
+        let terminalView = self.terminalView as? TmtermTerminalView
+      else {
+        return event
+      }
+
+      return terminalView.handleNativeScrollWheel(event) { lines in
+        self.scrollTmux(lines: lines)
+      } ? nil : event
+    }
+  }
+
   private func handleTabShortcut(_ event: NSEvent) -> Bool {
     guard
       terminalView?.window?.isKeyWindow == true,
@@ -291,6 +313,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     }
 
     return false
+  }
+
+  private func scrollTmux(lines: Int) {
+    guard lines != 0 else {
+      return
+    }
+
+    if lines > 0 {
+      runTmux(arguments: ["copy-mode", "-e"])
+      runTmux(arguments: ["send-keys", "-t", tmuxSessionName, "-X", "-N", "\(lines)", "scroll-up"])
+    } else {
+      runTmux(arguments: ["send-keys", "-t", tmuxSessionName, "-X", "-N", "\(abs(lines))", "scroll-down"])
+    }
   }
 
   private func findTmuxExecutable() -> String? {
@@ -607,6 +642,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private let markedTextView = MarkedTextOverlayView(frame: .zero)
   private var markedText: NSAttributedString?
   private var markedSelectedRange = NSRange(location: 0, length: 0)
+  private var preciseScrollRemainder: CGFloat = 0
 
   override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
     super.cursorStyleChanged(source: source, newStyle: .steadyBar)
@@ -652,6 +688,31 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     }
 
     return false
+  }
+
+  func handleNativeScrollWheel(_ event: NSEvent, scrollAlternateScreen: (Int) -> Void) -> Bool {
+    guard event.scrollingDeltaY != 0 || event.deltaY != 0 else {
+      return false
+    }
+
+    if event.phase == .ended || event.momentumPhase == .ended || event.phase == .cancelled {
+      preciseScrollRemainder = 0
+      return true
+    }
+
+    let lines = scrollLineDelta(for: event)
+    guard lines != 0 else {
+      return true
+    }
+
+    if canScroll, lines > 0 {
+      scrollUp(lines: lines)
+    } else if canScroll {
+      scrollDown(lines: abs(lines))
+    } else {
+      scrollAlternateScreen(lines)
+    }
+    return true
   }
 
   override func unmarkText() {
@@ -746,6 +807,19 @@ final class TmtermTerminalView: LocalProcessTerminalView {
       width: textSize.width,
       height: textSize.height
     )
+  }
+
+  private func scrollLineDelta(for event: NSEvent) -> Int {
+    if event.hasPreciseScrollingDeltas {
+      let lineHeight = max(1, currentCellSize().height)
+      preciseScrollRemainder += event.scrollingDeltaY / lineHeight
+      let lines = Int(preciseScrollRemainder.rounded(.towardZero))
+      preciseScrollRemainder -= CGFloat(lines)
+      return lines
+    }
+
+    let delta = event.deltaY == 0 ? event.scrollingDeltaY : event.deltaY
+    return Int(delta.rounded(.toNearestOrAwayFromZero))
   }
 
   private func currentCellSize() -> NSSize {
