@@ -1,26 +1,40 @@
 # tmterm
 
-tmterm is a native macOS terminal prototype built with SwiftTerm.
+tmterm is a native macOS terminal prototype built with SwiftTerm and tmux.
+
+It runs a private tmux session, renders tmux windows as native tabs, and groups
+tabs by their current directory.
 
 ## Requirements
 
 - macOS
+- tmux
 - Swift 5.9 or later
 - Xcode Command Line Tools
 
 ## Development
 
-Build the app:
+Run the app during development:
 
 ```sh
-swift build
+mise run dev
 ```
 
-Run the app:
+Build the debug executable:
 
 ```sh
-swift run tmterm
+mise run build
 ```
 
-tmterm opens the user's login shell in a native AppKit window using SwiftTerm's
-`LocalProcessTerminalView`.
+Build a debug app bundle:
+
+```sh
+mise run app
+```
+
+## Shortcuts
+
+- `Ctrl-W n`: new tab
+- `Ctrl-W h` / `Ctrl-W l`: move between directory groups
+- `Ctrl-W j` / `Ctrl-W k`: move within a directory group
+- `Ctrl-W 0` ... `Ctrl-W 9`: select tmux window by index
