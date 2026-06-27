@@ -212,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
         return true
       }
 
-      if event.matchesShortcutKey("c") {
+      if event.matchesShortcutKey("n") {
         createTmuxWindow()
         return true
       }
@@ -459,9 +459,9 @@ private extension NSEvent {
   }
 
   private static let shortcutKeyCodes: [String: UInt16] = [
-    "c": 8,
     "h": 4,
     "l": 37,
+    "n": 45,
     "w": 13
   ]
 }
