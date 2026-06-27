@@ -121,7 +121,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
   func processTerminated(source: TerminalView, exitCode: Int32?) {
-    source.feed(text: "\r\n[process exited]\r\n")
+    DispatchQueue.main.async {
+      NSApp.terminate(nil)
+    }
   }
 
   @objc private func increaseFontSize(_ sender: Any?) {
