@@ -357,11 +357,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     }
 
     let nextGroupPosition = (activeGroupPosition + offset + groups.count) % groups.count
-    guard let nextWindow = groups[nextGroupPosition].windows.first else {
+    guard let nextWindowIndex = contentView?.selectedWindowIndex(inGroupAt: nextGroupPosition) else {
       return
     }
 
-    selectTmuxWindow(index: nextWindow.index)
+    selectTmuxWindow(index: nextWindowIndex)
   }
 
   private func selectAdjacentTmuxWindowInGroup(offset: Int) {
@@ -934,9 +934,10 @@ final class TerminalContainerView: NSView {
   private let padding: CGFloat = 8
   private let terminalTopPadding: CGFloat = 8
   private let tabRowHeight: CGFloat = 30
+  private let groupHeaderHeight: CGFloat = 22
   private let tabBarVerticalPadding: CGFloat = 8
   private var windows: [TmuxWindow] = []
-  private var topWindowIndexByPath: [String: Int] = [:]
+  private var selectedWindowIndexByPath: [String: Int] = [:]
   var tmuxWindows: [TmuxWindow] {
     windows
   }
@@ -1020,6 +1021,12 @@ final class TerminalContainerView: NSView {
       groupStack.spacing = 0
       groupStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
+      let label = TabGroupHeaderLabel(string: displayName(forCurrentPath: group.currentPath))
+      label.toolTip = group.currentPath
+      label.widthAnchor.constraint(equalToConstant: 136).isActive = true
+      label.heightAnchor.constraint(equalToConstant: groupHeaderHeight).isActive = true
+      groupStack.addArrangedSubview(label)
+
       group.windows.forEach { window in
         let title = window.name.isEmpty ? "\(window.index)" : "\(window.index)  \(window.name)"
         let button = TabButton(title: title)
@@ -1038,13 +1045,25 @@ final class TerminalContainerView: NSView {
       tabBar.addArrangedSubview(groupStack)
     }
 
+    let addButtonStack = NSStackView()
+    addButtonStack.orientation = .vertical
+    addButtonStack.alignment = .leading
+    addButtonStack.distribution = .fill
+    addButtonStack.spacing = 0
+
+    let addButtonSpacer = NSView()
+    addButtonSpacer.widthAnchor.constraint(equalToConstant: 36).isActive = true
+    addButtonSpacer.heightAnchor.constraint(equalToConstant: groupHeaderHeight).isActive = true
+    addButtonStack.addArrangedSubview(addButtonSpacer)
+
     let addButton = TabButton(title: "+")
     addButton.isAddButton = true
     addButton.target = self
     addButton.action = #selector(newTab)
     addButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
     addButton.heightAnchor.constraint(equalToConstant: tabRowHeight).isActive = true
-    tabBar.addArrangedSubview(addButton)
+    addButtonStack.addArrangedSubview(addButton)
+    tabBar.addArrangedSubview(addButtonStack)
 
     let spacer = NSView()
     spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -1062,7 +1081,7 @@ final class TerminalContainerView: NSView {
 
   private var currentTabBarHeight: CGFloat {
     let maxWindowCount = max(1, tmuxWindowGroups.map(\.windows.count).max() ?? 1)
-    return CGFloat(maxWindowCount) * tabRowHeight + tabBarVerticalPadding
+    return groupHeaderHeight + CGFloat(maxWindowCount) * tabRowHeight + tabBarVerticalPadding
   }
 
   private func makeWindowGroups(from windows: [TmuxWindow]) -> [TmuxWindowGroup] {
@@ -1074,7 +1093,7 @@ final class TerminalContainerView: NSView {
         groupWindows.append(window)
         groups[index] = TmuxWindowGroup(
           currentPath: window.currentPath,
-          windows: orderedWindows(groupWindows, currentPath: window.currentPath)
+          windows: groupWindows
         )
       } else {
         groups.append(TmuxWindowGroup(currentPath: window.currentPath, windows: [window]))
@@ -1087,23 +1106,32 @@ final class TerminalContainerView: NSView {
   private func rememberActiveWindowPositions(in windows: [TmuxWindow]) {
     windows.forEach { window in
       if window.isActive {
-        topWindowIndexByPath[window.currentPath] = window.index
+        selectedWindowIndexByPath[window.currentPath] = window.index
       }
     }
   }
 
-  private func orderedWindows(_ windows: [TmuxWindow], currentPath: String) -> [TmuxWindow] {
-    guard
-      let topWindowIndex = topWindowIndexByPath[currentPath],
-      let topIndex = windows.firstIndex(where: { $0.index == topWindowIndex })
-    else {
-      return windows
+  func selectedWindowIndex(inGroupAt position: Int) -> Int? {
+    let groups = tmuxWindowGroups
+    guard groups.indices.contains(position) else {
+      return nil
     }
 
-    var orderedWindows = windows
-    let topWindow = orderedWindows.remove(at: topIndex)
-    orderedWindows.insert(topWindow, at: 0)
-    return orderedWindows
+    let group = groups[position]
+    if
+      let rememberedIndex = selectedWindowIndexByPath[group.currentPath],
+      group.windows.contains(where: { $0.index == rememberedIndex })
+    {
+      return rememberedIndex
+    }
+
+    return group.windows.first?.index
+  }
+
+  private func displayName(forCurrentPath currentPath: String) -> String {
+    let url = URL(fileURLWithPath: currentPath)
+    let lastPathComponent = url.lastPathComponent
+    return lastPathComponent.isEmpty ? currentPath : lastPathComponent
   }
 
   @objc private func selectTab(_ sender: NSButton) {
@@ -1112,6 +1140,40 @@ final class TerminalContainerView: NSView {
 
   @objc private func newTab() {
     onNewTab?()
+  }
+}
+
+final class TabGroupHeaderLabel: NSTextField {
+  init(string: String) {
+    super.init(frame: .zero)
+    stringValue = string
+    isBezeled = false
+    isBordered = false
+    isEditable = false
+    isSelectable = false
+    drawsBackground = false
+    lineBreakMode = .byTruncatingMiddle
+    font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    textColor = NSColor(calibratedWhite: 0.50, alpha: 1)
+    alignment = .left
+    setContentHuggingPriority(.defaultHigh, for: .horizontal)
+    setContentCompressionResistancePriority(.required, for: .horizontal)
+  }
+
+  required init?(coder: NSCoder) {
+    nil
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    let insetBounds = bounds.insetBy(dx: 12, dy: 4)
+    let paragraphStyle = NSMutableParagraphStyle()
+    paragraphStyle.lineBreakMode = .byTruncatingMiddle
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: font ?? NSFont.systemFont(ofSize: 11, weight: .semibold),
+      .foregroundColor: textColor ?? NSColor(calibratedWhite: 0.50, alpha: 1),
+      .paragraphStyle: paragraphStyle
+    ]
+    (stringValue as NSString).draw(in: insetBounds, withAttributes: attributes)
   }
 }
 
