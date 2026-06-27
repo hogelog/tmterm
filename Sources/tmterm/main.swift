@@ -454,6 +454,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     markedTextView.text = attributedText.string
     markedTextView.font = font
     markedTextView.cellSize = currentCellSize()
+    markedTextView.backgroundColor = backgroundColorAtCursor()
     markedTextView.isHidden = false
 
     if markedTextView.superview == nil {
@@ -539,19 +540,19 @@ final class TmtermTerminalView: LocalProcessTerminalView {
 
     let windowCaretRect = window.convertFromScreen(screenCaretRect)
     let caretRect = convert(windowCaretRect, from: nil)
-    let overlaySize = markedTextView.fittingSize
-    let maxX = max(0, bounds.maxX - overlaySize.width)
+    let textSize = markedTextView.textSize
+    let maxX = max(0, bounds.maxX - textSize.width)
     let x = min(maxX, max(0, caretRect.minX))
     let y = min(
-      max(0, bounds.maxY - overlaySize.height),
+      max(0, bounds.maxY - textSize.height),
       max(0, caretRect.minY)
     )
 
     markedTextView.frame = NSRect(
       x: x,
       y: y,
-      width: overlaySize.width,
-      height: overlaySize.height
+      width: max(textSize.width, bounds.maxX - x),
+      height: textSize.height
     )
   }
 
@@ -565,6 +566,84 @@ final class TmtermTerminalView: LocalProcessTerminalView {
       width: CGFloat(cellSize.width) / scale,
       height: CGFloat(cellSize.height) / scale
     )
+  }
+
+  private func backgroundColorAtCursor() -> NSColor {
+    guard let charData = terminal.getCharData(col: terminal.buffer.x, row: terminal.buffer.y) else {
+      return nativeBackgroundColor
+    }
+
+    return nsColor(forBackground: charData.attribute.bg)
+  }
+
+  private func nsColor(forBackground color: Attribute.Color) -> NSColor {
+    switch color {
+    case .defaultColor, .defaultInvertedColor:
+      return nativeBackgroundColor
+    case .ansi256(let code):
+      return Self.nsColor(forAnsi256: code, defaultBackground: nativeBackgroundColor)
+    case .trueColor(let red, let green, let blue):
+      return NSColor(
+        deviceRed: CGFloat(red) / 255.0,
+        green: CGFloat(green) / 255.0,
+        blue: CGFloat(blue) / 255.0,
+        alpha: 1.0
+      )
+    }
+  }
+
+  private static func nsColor(forAnsi256 code: UInt8, defaultBackground: NSColor) -> NSColor {
+    let index = Int(code)
+    if index < defaultAnsiColors.count {
+      return defaultAnsiColors[index]
+    }
+
+    if (16...231).contains(index) {
+      let value = index - 16
+      let red = value / 36
+      let green = (value / 6) % 6
+      let blue = value % 6
+      return NSColor(
+        deviceRed: CGFloat(ansiColorCubeValue(red)) / 255.0,
+        green: CGFloat(ansiColorCubeValue(green)) / 255.0,
+        blue: CGFloat(ansiColorCubeValue(blue)) / 255.0,
+        alpha: 1.0
+      )
+    }
+
+    if (232...255).contains(index) {
+      let gray = CGFloat(8 + ((index - 232) * 10)) / 255.0
+      return NSColor(deviceWhite: gray, alpha: 1.0)
+    }
+
+    return defaultBackground
+  }
+
+  private static func ansiColorCubeValue(_ value: Int) -> Int {
+    value == 0 ? 0 : 55 + (value * 40)
+  }
+
+  private static let defaultAnsiColors = [
+    nsColor(red: 9, green: 11, blue: 13),
+    nsColor(red: 226, green: 92, blue: 87),
+    nsColor(red: 128, green: 210, blue: 112),
+    nsColor(red: 232, green: 185, blue: 85),
+    nsColor(red: 102, green: 162, blue: 235),
+    nsColor(red: 198, green: 128, blue: 230),
+    nsColor(red: 89, green: 204, blue: 216),
+    nsColor(red: 218, green: 224, blue: 232),
+    nsColor(red: 112, green: 122, blue: 134),
+    nsColor(red: 246, green: 113, blue: 106),
+    nsColor(red: 154, green: 232, blue: 132),
+    nsColor(red: 249, green: 205, blue: 105),
+    nsColor(red: 125, green: 184, blue: 255),
+    nsColor(red: 218, green: 154, blue: 246),
+    nsColor(red: 111, green: 226, blue: 238),
+    nsColor(red: 244, green: 247, blue: 250)
+  ]
+
+  private static func nsColor(red: CGFloat, green: CGFloat, blue: CGFloat) -> NSColor {
+    NSColor(deviceRed: red / 255.0, green: green / 255.0, blue: blue / 255.0, alpha: 1.0)
   }
 
   private static func attributedString(from value: Any) -> NSAttributedString? {
@@ -590,12 +669,17 @@ private final class MarkedTextOverlayView: NSView {
   }
   var font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
   var cellSize = NSSize(width: 8, height: 16)
+  var backgroundColor = NSColor.black
 
   override var isFlipped: Bool {
     true
   }
 
   override var fittingSize: NSSize {
+    textSize
+  }
+
+  var textSize: NSSize {
     guard !text.isEmpty else {
       return .zero
     }
@@ -611,11 +695,15 @@ private final class MarkedTextOverlayView: NSView {
       return
     }
 
+    backgroundColor.setFill()
+    bounds.fill()
+
     NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.86, alpha: 0.85).setStroke()
     let underlineY = bounds.maxY - 1
+    let underlineWidth = min(bounds.maxX, textSize.width)
     let underlinePath = NSBezierPath()
     underlinePath.move(to: NSPoint(x: 0, y: underlineY))
-    underlinePath.line(to: NSPoint(x: bounds.maxX, y: underlineY))
+    underlinePath.line(to: NSPoint(x: underlineWidth, y: underlineY))
     underlinePath.lineWidth = 1
     underlinePath.stroke()
 
