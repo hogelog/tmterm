@@ -421,8 +421,207 @@ struct TmuxWindow: Equatable {
 }
 
 final class TmtermTerminalView: LocalProcessTerminalView {
+  private let markedTextView = MarkedTextOverlayView(frame: .zero)
+  private var markedText: NSAttributedString?
+  private var markedSelectedRange = NSRange(location: 0, length: 0)
+
   override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
     super.cursorStyleChanged(source: source, newStyle: .steadyBar)
+    updateMarkedTextViewFrame()
+  }
+
+  override func insertText(_ string: Any, replacementRange: NSRange) {
+    clearMarkedText()
+    super.insertText(string, replacementRange: replacementRange)
+  }
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+
+    guard let attributedText = Self.attributedString(from: string), attributedText.length > 0 else {
+      clearMarkedText()
+      return
+    }
+
+    markedText = attributedText
+    markedSelectedRange = selectedRange
+    markedTextView.attributedText = Self.overlayAttributedString(from: attributedText, font: font)
+    markedTextView.isHidden = false
+
+    if markedTextView.superview == nil {
+      addSubview(markedTextView, positioned: .above, relativeTo: nil)
+    }
+    updateMarkedTextViewFrame()
+  }
+
+  override func unmarkText() {
+    clearMarkedText()
+    super.unmarkText()
+  }
+
+  override func hasMarkedText() -> Bool {
+    markedText?.length ?? 0 > 0
+  }
+
+  override func markedRange() -> NSRange {
+    guard let markedText, markedText.length > 0 else {
+      return NSRange(location: NSNotFound, length: 0)
+    }
+    return NSRange(location: 0, length: markedText.length)
+  }
+
+  override func selectedRange() -> NSRange {
+    guard hasMarkedText() else {
+      return super.selectedRange()
+    }
+    return markedSelectedRange
+  }
+
+  override func attributedSubstring(
+    forProposedRange range: NSRange,
+    actualRange: NSRangePointer?
+  ) -> NSAttributedString? {
+    guard let markedText else {
+      return super.attributedSubstring(forProposedRange: range, actualRange: actualRange)
+    }
+
+    let boundedRange = NSIntersectionRange(range, NSRange(location: 0, length: markedText.length))
+    actualRange?.pointee = boundedRange
+    guard boundedRange.length > 0 else {
+      return nil
+    }
+    return markedText.attributedSubstring(from: boundedRange)
+  }
+
+  override func validAttributesForMarkedText() -> [NSAttributedString.Key] {
+    [
+      .backgroundColor,
+      .foregroundColor,
+      .font,
+      .underlineColor,
+      .underlineStyle
+    ]
+  }
+
+  override func layout() {
+    super.layout()
+    updateMarkedTextViewFrame()
+  }
+
+  private func clearMarkedText() {
+    markedText = nil
+    markedSelectedRange = NSRange(location: 0, length: 0)
+    markedTextView.attributedText = nil
+    markedTextView.isHidden = true
+  }
+
+  private func updateMarkedTextViewFrame() {
+    guard markedTextView.superview != nil, !markedTextView.isHidden else {
+      return
+    }
+
+    var actualRange = NSRange(location: 0, length: 0)
+    let screenCaretRect = firstRect(
+      forCharacterRange: markedRange(),
+      actualRange: &actualRange
+    )
+    guard screenCaretRect != .zero, let window else {
+      return
+    }
+
+    let windowCaretRect = window.convertFromScreen(screenCaretRect)
+    let caretRect = convert(windowCaretRect, from: nil)
+    let overlaySize = markedTextView.fittingSize
+    let maxX = max(0, bounds.maxX - overlaySize.width)
+    let x = min(maxX, max(0, caretRect.minX))
+    let y = min(
+      max(0, bounds.maxY - overlaySize.height),
+      max(0, caretRect.minY)
+    )
+
+    markedTextView.frame = NSRect(
+      x: x,
+      y: y,
+      width: overlaySize.width,
+      height: overlaySize.height
+    )
+  }
+
+  private static func attributedString(from value: Any) -> NSAttributedString? {
+    if let attributedString = value as? NSAttributedString {
+      return attributedString
+    }
+    if let string = value as? NSString {
+      return NSAttributedString(string: string as String)
+    }
+    if let string = value as? String {
+      return NSAttributedString(string: string)
+    }
+    return nil
+  }
+
+  private static func overlayAttributedString(
+    from attributedString: NSAttributedString,
+    font: NSFont
+  ) -> NSAttributedString {
+    let mutableString = NSMutableAttributedString(attributedString: attributedString)
+    let fullRange = NSRange(location: 0, length: mutableString.length)
+    mutableString.addAttributes(
+      [
+        .font: font,
+        .foregroundColor: NSColor(calibratedWhite: 1.0, alpha: 1.0),
+        .underlineColor: NSColor(calibratedWhite: 1.0, alpha: 0.9),
+        .underlineStyle: NSUnderlineStyle.single.rawValue
+      ],
+      range: fullRange
+    )
+    return mutableString
+  }
+}
+
+private final class MarkedTextOverlayView: NSView {
+  var attributedText: NSAttributedString? {
+    didSet {
+      needsDisplay = true
+    }
+  }
+
+  override var isFlipped: Bool {
+    true
+  }
+
+  override var fittingSize: NSSize {
+    guard let attributedText, attributedText.length > 0 else {
+      return .zero
+    }
+
+    let textSize = attributedText.size()
+    return NSSize(
+      width: ceil(textSize.width),
+      height: ceil(textSize.height)
+    )
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    guard let attributedText, attributedText.length > 0 else {
+      return
+    }
+
+    NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.86, alpha: 0.85).setStroke()
+    let underlineY = bounds.maxY - 1
+    let underlinePath = NSBezierPath()
+    underlinePath.move(to: NSPoint(x: 0, y: underlineY))
+    underlinePath.line(to: NSPoint(x: bounds.maxX, y: underlineY))
+    underlinePath.lineWidth = 1
+    underlinePath.stroke()
+
+    let textRect = NSRect(
+      x: 0,
+      y: 0,
+      width: bounds.width,
+      height: attributedText.size().height
+    )
+    attributedText.draw(in: textRect)
   }
 }
 
