@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   private var terminalView: LocalProcessTerminalView?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    changeCurrentDirectoryToHome()
     configureMenu()
 
     guard let tmuxExecutable = findTmuxExecutable() else {
@@ -135,6 +136,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       execName: "tmux",
       currentDirectory: home
     )
+  }
+
+  private func changeCurrentDirectoryToHome() {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    if !FileManager.default.changeCurrentDirectoryPath(home) {
+      NSLog("Failed to change current directory to \(home)")
+    }
   }
 
   func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
