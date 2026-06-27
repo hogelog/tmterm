@@ -31,10 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     }
     self.tmuxExecutable = tmuxExecutable
 
-    let terminalView = LocalProcessTerminalView(frame: .zero)
+    let terminalView = TmtermTerminalView(frame: .zero)
     terminalView.processDelegate = self
     terminalView.autoresizingMask = [.width, .height]
     terminalView.applyDefaultColorScheme()
+    terminalView.terminal.options.cursorStyle = .steadyBlock
+    terminalView.cursorStyleChanged(source: terminalView.terminal, newStyle: .steadyBlock)
     terminalView.caretViewTracksFocus = false
     let contentView = TerminalContainerView(terminalView: terminalView)
     contentView.onSelectTab = { [weak self] index in
@@ -365,6 +367,25 @@ struct TmuxWindow: Equatable {
   let name: String
 }
 
+final class TmtermTerminalView: LocalProcessTerminalView {
+  override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
+    super.cursorStyleChanged(source: source, newStyle: newStyle.steady)
+  }
+}
+
+private extension CursorStyle {
+  var steady: CursorStyle {
+    switch self {
+    case .blinkBlock, .steadyBlock:
+      return .steadyBlock
+    case .blinkUnderline, .steadyUnderline:
+      return .steadyUnderline
+    case .blinkBar, .steadyBar:
+      return .steadyBar
+    }
+  }
+}
+
 private extension NSEvent {
   func matchesShortcutKey(_ key: String) -> Bool {
     if charactersIgnoringModifiers?.lowercased() == key {
@@ -604,6 +625,8 @@ private extension LocalProcessTerminalView {
   func applyDefaultColorScheme() {
     nativeForegroundColor = NSColor(calibratedRed: 0.82, green: 0.85, blue: 0.88, alpha: 1.0)
     nativeBackgroundColor = NSColor(calibratedRed: 0.035, green: 0.043, blue: 0.05, alpha: 1.0)
+    caretColor = NSColor(calibratedRed: 0.46, green: 0.54, blue: 0.64, alpha: 1.0)
+    caretTextColor = nativeBackgroundColor
     terminal.installPalette(colors: Self.defaultAnsiColors)
     wantsLayer = true
     layer?.backgroundColor = nativeBackgroundColor.cgColor
