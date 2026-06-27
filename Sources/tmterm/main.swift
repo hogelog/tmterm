@@ -104,7 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
         "-t",
         tmuxSessionName,
         "status",
-        "off"
+        "off",
+        ";",
+        "set-option",
+        "-t",
+        tmuxSessionName,
+        "prefix",
+        "None"
       ]),
       environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"),
       execName: "tmux",
