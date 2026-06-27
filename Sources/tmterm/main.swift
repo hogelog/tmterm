@@ -445,7 +445,9 @@ final class TmtermTerminalView: LocalProcessTerminalView {
 
     markedText = attributedText
     markedSelectedRange = selectedRange
-    markedTextView.attributedText = Self.overlayAttributedString(from: attributedText, font: font)
+    markedTextView.text = attributedText.string
+    markedTextView.font = font
+    markedTextView.cellSize = currentCellSize()
     markedTextView.isHidden = false
 
     if markedTextView.superview == nil {
@@ -511,7 +513,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private func clearMarkedText() {
     markedText = nil
     markedSelectedRange = NSRange(location: 0, length: 0)
-    markedTextView.attributedText = nil
+    markedTextView.text = ""
     markedTextView.isHidden = true
   }
 
@@ -547,6 +549,18 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     )
   }
 
+  private func currentCellSize() -> NSSize {
+    guard let cellSize = cellSizeInPixels(source: terminal) else {
+      return NSSize(width: font.advancement(forGlyph: font.glyph(withName: "W")).width, height: font.boundingRectForFont.height)
+    }
+
+    let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1
+    return NSSize(
+      width: CGFloat(cellSize.width) / scale,
+      height: CGFloat(cellSize.height) / scale
+    )
+  }
+
   private static func attributedString(from value: Any) -> NSAttributedString? {
     if let attributedString = value as? NSAttributedString {
       return attributedString
@@ -560,50 +574,34 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     return nil
   }
 
-  private static func overlayAttributedString(
-    from attributedString: NSAttributedString,
-    font: NSFont
-  ) -> NSAttributedString {
-    let mutableString = NSMutableAttributedString(attributedString: attributedString)
-    let fullRange = NSRange(location: 0, length: mutableString.length)
-    mutableString.addAttributes(
-      [
-        .font: font,
-        .foregroundColor: NSColor(calibratedWhite: 1.0, alpha: 1.0),
-        .underlineColor: NSColor(calibratedWhite: 1.0, alpha: 0.9),
-        .underlineStyle: NSUnderlineStyle.single.rawValue
-      ],
-      range: fullRange
-    )
-    return mutableString
-  }
 }
 
 private final class MarkedTextOverlayView: NSView {
-  var attributedText: NSAttributedString? {
+  var text = "" {
     didSet {
       needsDisplay = true
     }
   }
+  var font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+  var cellSize = NSSize(width: 8, height: 16)
 
   override var isFlipped: Bool {
     true
   }
 
   override var fittingSize: NSSize {
-    guard let attributedText, attributedText.length > 0 else {
+    guard !text.isEmpty else {
       return .zero
     }
 
-    let textSize = attributedText.size()
     return NSSize(
-      width: ceil(textSize.width),
-      height: ceil(textSize.height)
+      width: ceil(CGFloat(Self.columnWidth(of: text)) * cellSize.width),
+      height: ceil(cellSize.height)
     )
   }
 
   override func draw(_ dirtyRect: NSRect) {
-    guard let attributedText, attributedText.length > 0 else {
+    guard !text.isEmpty else {
       return
     }
 
@@ -615,13 +613,107 @@ private final class MarkedTextOverlayView: NSView {
     underlinePath.lineWidth = 1
     underlinePath.stroke()
 
-    let textRect = NSRect(
-      x: 0,
-      y: 0,
-      width: bounds.width,
-      height: attributedText.size().height
-    )
-    attributedText.draw(in: textRect)
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: NSColor(calibratedWhite: 1.0, alpha: 1.0)
+    ]
+    var x: CGFloat = 0
+    for character in text.composedCharacters {
+      let columnWidth = Self.columnWidth(of: character)
+      let characterRect = NSRect(
+        x: x,
+        y: 0,
+        width: CGFloat(columnWidth) * cellSize.width,
+        height: bounds.height
+      )
+      (character as NSString).draw(in: characterRect, withAttributes: attributes)
+      x += CGFloat(columnWidth) * cellSize.width
+    }
+  }
+
+  private static func columnWidth(of string: String) -> Int {
+    string.composedCharacters.reduce(0) { total, character in
+      total + columnWidth(ofCharacter: character)
+    }
+  }
+
+  private static func columnWidth(ofCharacter character: String) -> Int {
+    if character.unicodeScalars.allSatisfy({ $0.properties.isJoinControl || $0.properties.generalCategory == .nonspacingMark }) {
+      return 0
+    }
+
+    guard let scalar = character.unicodeScalars.first else {
+      return 0
+    }
+
+    return isWide(scalar) ? 2 : 1
+  }
+
+  private static func isWide(_ scalar: Unicode.Scalar) -> Bool {
+    switch scalar.value {
+    case 0x1100...0x115F,
+      0x231A...0x231B,
+      0x2329...0x232A,
+      0x23E9...0x23EC,
+      0x23F0,
+      0x23F3,
+      0x25FD...0x25FE,
+      0x2614...0x2615,
+      0x2648...0x2653,
+      0x267F,
+      0x2693,
+      0x26A1,
+      0x26AA...0x26AB,
+      0x26BD...0x26BE,
+      0x26C4...0x26C5,
+      0x26CE,
+      0x26D4,
+      0x26EA,
+      0x26F2...0x26F3,
+      0x26F5,
+      0x26FA,
+      0x26FD,
+      0x2705,
+      0x270A...0x270B,
+      0x2728,
+      0x274C,
+      0x274E,
+      0x2753...0x2755,
+      0x2757,
+      0x2795...0x2797,
+      0x27B0,
+      0x27BF,
+      0x2B1B...0x2B1C,
+      0x2B50,
+      0x2B55,
+      0x2E80...0xA4CF,
+      0xAC00...0xD7A3,
+      0xF900...0xFAFF,
+      0xFE10...0xFE19,
+      0xFE30...0xFE6F,
+      0xFF00...0xFF60,
+      0xFFE0...0xFFE6,
+      0x1F300...0x1FAFF,
+      0x20000...0x3FFFD:
+      return true
+    default:
+      return false
+    }
+  }
+}
+
+private extension String {
+  var composedCharacters: [String] {
+    var characters: [String] = []
+    (self as NSString).enumerateSubstrings(
+      in: NSRange(location: 0, length: (self as NSString).length),
+      options: [.byComposedCharacterSequences]
+    ) { substring, _, _, _ in
+      if let substring {
+        characters.append(substring)
+      }
+    }
+    return characters
   }
 }
 
