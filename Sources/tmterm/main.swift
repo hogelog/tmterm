@@ -338,8 +338,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   private func configureMenu() {
     let mainMenu = NSMenu()
     let appMenuItem = NSMenuItem()
+    let editMenuItem = NSMenuItem()
     let viewMenuItem = NSMenuItem()
     mainMenu.addItem(appMenuItem)
+    mainMenu.addItem(editMenuItem)
     mainMenu.addItem(viewMenuItem)
 
     let appMenu = NSMenu()
@@ -351,6 +353,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       )
     )
     appMenuItem.submenu = appMenu
+
+    let editMenu = NSMenu(title: "Edit")
+    editMenu.addItem(
+      NSMenuItem(
+        title: "Copy",
+        action: #selector(NSText.copy(_:)),
+        keyEquivalent: "c"
+      )
+    )
+    editMenu.addItem(
+      NSMenuItem(
+        title: "Paste",
+        action: #selector(NSText.paste(_:)),
+        keyEquivalent: "v"
+      )
+    )
+    editMenu.addItem(NSMenuItem.separator())
+    editMenu.addItem(
+      NSMenuItem(
+        title: "Select All",
+        action: #selector(NSText.selectAll(_:)),
+        keyEquivalent: "a"
+      )
+    )
+    editMenuItem.submenu = editMenu
 
     let viewMenu = NSMenu(title: "View")
     viewMenu.addItem(
