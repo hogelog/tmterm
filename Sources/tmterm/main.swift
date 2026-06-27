@@ -476,6 +476,7 @@ final class TerminalContainerView: NSView {
   private let terminalView: LocalProcessTerminalView
   private let tabBar = NSStackView()
   private let padding: CGFloat = 8
+  private let terminalTopPadding: CGFloat = 8
   private let tabBarHeight: CGFloat = 34
   private var windows: [TmuxWindow] = []
   var tmuxWindows: [TmuxWindow] {
@@ -509,7 +510,7 @@ final class TerminalContainerView: NSView {
       x: padding,
       y: tabBarHeight + padding,
       width: max(0, bounds.width - padding * 2),
-      height: max(0, bounds.height - padding - tabBarHeight)
+      height: max(0, bounds.height - padding - terminalTopPadding - tabBarHeight)
     )
   }
 
