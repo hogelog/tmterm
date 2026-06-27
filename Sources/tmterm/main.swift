@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     contentView.onNewTab = { [weak self] in
       self?.createTmuxWindow()
     }
+    contentView.onCloseTab = { [weak self] index in
+      self?.closeTmuxWindow(index: index)
+    }
 
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 670),
@@ -209,17 +212,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       isWaitingForTabShortcut = false
 
       if event.matchesShortcutKey("h") {
-        selectAdjacentTmuxWindow(offset: -1)
+        selectAdjacentTmuxWindowGroup(offset: -1)
         return true
       }
 
       if event.matchesShortcutKey("l") {
-        selectAdjacentTmuxWindow(offset: 1)
+        selectAdjacentTmuxWindowGroup(offset: 1)
+        return true
+      }
+
+      if event.matchesShortcutKey("j") {
+        selectAdjacentTmuxWindowInGroup(offset: 1)
+        return true
+      }
+
+      if event.matchesShortcutKey("k") {
+        selectAdjacentTmuxWindowInGroup(offset: -1)
         return true
       }
 
       if event.matchesShortcutKey("n") {
         createTmuxWindow()
+        return true
+      }
+
+      if let number = event.shortcutNumber {
+        selectTmuxWindow(index: number)
         return true
       }
 
@@ -295,7 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
         "-t",
         tmuxSessionName,
         "-F",
-        "#{window_index}\t#{window_active}\t#{window_name}"
+        "#{window_index}\t#{window_active}\t#{window_name}\t#{pane_current_path}"
       ])
     else {
       return
@@ -306,11 +324,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       .compactMap { line -> TmuxWindow? in
         let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
 
-        guard fields.count >= 3, let index = Int(fields[0]) else {
+        guard fields.count >= 4, let index = Int(fields[0]) else {
           return nil
         }
 
-        return TmuxWindow(index: index, isActive: fields[1] == "1", name: String(fields[2]))
+        return TmuxWindow(
+          index: index,
+          isActive: fields[1] == "1",
+          name: String(fields[2]),
+          currentPath: String(fields[3])
+        )
       }
 
     contentView?.setTabs(windows)
@@ -322,21 +345,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
-  private func selectAdjacentTmuxWindow(offset: Int) {
-    let windows = contentView?.tmuxWindows ?? []
+  private func selectAdjacentTmuxWindowGroup(offset: Int) {
+    let groups = contentView?.tmuxWindowGroups ?? []
     guard
-      let activePosition = windows.firstIndex(where: { $0.isActive }),
-      !windows.isEmpty
+      let activeGroupPosition = groups.firstIndex(where: { group in
+        group.windows.contains(where: { $0.isActive })
+      }),
+      !groups.isEmpty
     else {
       return
     }
 
-    let nextPosition = (activePosition + offset + windows.count) % windows.count
-    selectTmuxWindow(index: windows[nextPosition].index)
+    let nextGroupPosition = (activeGroupPosition + offset + groups.count) % groups.count
+    guard let nextWindow = groups[nextGroupPosition].windows.first else {
+      return
+    }
+
+    selectTmuxWindow(index: nextWindow.index)
+  }
+
+  private func selectAdjacentTmuxWindowInGroup(offset: Int) {
+    let windows = contentView?.tmuxWindows ?? []
+    guard
+      let activeWindow = windows.first(where: { $0.isActive }),
+      let group = contentView?.tmuxWindowGroups.first(where: { group in
+        group.windows.contains(where: { $0.index == activeWindow.index })
+      }),
+      let activePosition = group.windows.firstIndex(where: { $0.index == activeWindow.index }),
+      !group.windows.isEmpty
+    else {
+      return
+    }
+
+    let nextPosition = (activePosition + offset + group.windows.count) % group.windows.count
+    selectTmuxWindow(index: group.windows[nextPosition].index)
   }
 
   private func createTmuxWindow() {
     runTmux(arguments: ["new-window", "-t", tmuxSessionName])
+    refreshTabs()
+    terminalView?.window?.makeFirstResponder(terminalView)
+  }
+
+  private func closeTmuxWindow(index: Int) {
+    runTmux(arguments: ["kill-window", "-t", "\(tmuxSessionName):\(index)"])
     refreshTabs()
     terminalView?.window?.makeFirstResponder(terminalView)
   }
@@ -424,6 +476,12 @@ struct TmuxWindow: Equatable {
   let index: Int
   let isActive: Bool
   let name: String
+  let currentPath: String
+}
+
+struct TmuxWindowGroup: Equatable {
+  let currentPath: String
+  let windows: [TmuxWindow]
 }
 
 final class TmtermTerminalView: LocalProcessTerminalView {
@@ -830,11 +888,37 @@ private extension NSEvent {
     return keyCode == Self.shortcutKeyCodes[key]
   }
 
+  var shortcutNumber: Int? {
+    if let characters = charactersIgnoringModifiers,
+       characters.count == 1,
+       let value = Int(characters)
+    {
+      return value
+    }
+
+    return Self.shortcutNumberKeyCodes[keyCode]
+  }
+
   private static let shortcutKeyCodes: [String: UInt16] = [
     "h": 4,
+    "j": 38,
+    "k": 40,
     "l": 37,
     "n": 45,
     "w": 13
+  ]
+
+  private static let shortcutNumberKeyCodes: [UInt16: Int] = [
+    29: 0,
+    18: 1,
+    19: 2,
+    20: 3,
+    21: 4,
+    23: 5,
+    22: 6,
+    26: 7,
+    28: 8,
+    25: 9
   ]
 }
 
@@ -849,13 +933,18 @@ final class TerminalContainerView: NSView {
   private let tabBar = NSStackView()
   private let padding: CGFloat = 8
   private let terminalTopPadding: CGFloat = 8
-  private let tabBarHeight: CGFloat = 34
+  private let tabRowHeight: CGFloat = 30
+  private let tabBarVerticalPadding: CGFloat = 8
   private var windows: [TmuxWindow] = []
   var tmuxWindows: [TmuxWindow] {
     windows
   }
+  var tmuxWindowGroups: [TmuxWindowGroup] {
+    makeWindowGroups(from: windows)
+  }
   var onSelectTab: ((Int) -> Void)?
   var onNewTab: (() -> Void)?
+  var onCloseTab: ((Int) -> Void)?
 
   init(terminalView: LocalProcessTerminalView) {
     self.terminalView = terminalView
@@ -872,6 +961,7 @@ final class TerminalContainerView: NSView {
 
   override func layout() {
     super.layout()
+    let tabBarHeight = currentTabBarHeight
     tabBar.frame = NSRect(
       x: 0,
       y: 0,
@@ -888,6 +978,7 @@ final class TerminalContainerView: NSView {
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
+    let tabBarHeight = currentTabBarHeight
 
     NSColor(calibratedRed: 0.070, green: 0.079, blue: 0.090, alpha: 1).setFill()
     NSRect(
@@ -912,20 +1003,37 @@ final class TerminalContainerView: NSView {
     }
 
     self.windows = windows
+    needsLayout = true
+    needsDisplay = true
     tabBar.arrangedSubviews.forEach { view in
       tabBar.removeArrangedSubview(view)
       view.removeFromSuperview()
     }
 
-    windows.forEach { window in
-      let title = window.name.isEmpty ? "\(window.index + 1)" : "\(window.index + 1)  \(window.name)"
-      let button = TabButton(title: title)
-      button.isActive = window.isActive
-      button.target = self
-      button.action = #selector(selectTab(_:))
-      button.tag = window.index
-      button.widthAnchor.constraint(equalToConstant: 128).isActive = true
-      tabBar.addArrangedSubview(button)
+    tmuxWindowGroups.forEach { group in
+      let groupStack = NSStackView()
+      groupStack.orientation = .vertical
+      groupStack.alignment = .leading
+      groupStack.distribution = .fill
+      groupStack.spacing = 0
+      groupStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+
+      group.windows.forEach { window in
+        let title = window.name.isEmpty ? "\(window.index)" : "\(window.index)  \(window.name)"
+        let button = TabButton(title: title)
+        button.isActive = window.isActive
+        button.target = self
+        button.action = #selector(selectTab(_:))
+        button.tag = window.index
+        button.closeHandler = { [weak self] index in
+          self?.onCloseTab?(index)
+        }
+        button.widthAnchor.constraint(equalToConstant: 136).isActive = true
+        button.heightAnchor.constraint(equalToConstant: tabRowHeight).isActive = true
+        groupStack.addArrangedSubview(button)
+      }
+
+      tabBar.addArrangedSubview(groupStack)
     }
 
     let addButton = TabButton(title: "+")
@@ -933,6 +1041,7 @@ final class TerminalContainerView: NSView {
     addButton.target = self
     addButton.action = #selector(newTab)
     addButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
+    addButton.heightAnchor.constraint(equalToConstant: tabRowHeight).isActive = true
     tabBar.addArrangedSubview(addButton)
 
     let spacer = NSView()
@@ -942,11 +1051,32 @@ final class TerminalContainerView: NSView {
 
   private func configureTabBar() {
     tabBar.orientation = .horizontal
-    tabBar.alignment = .centerY
+    tabBar.alignment = .top
     tabBar.distribution = .fill
     tabBar.spacing = 2
     tabBar.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
     addSubview(tabBar)
+  }
+
+  private var currentTabBarHeight: CGFloat {
+    let maxWindowCount = max(1, tmuxWindowGroups.map(\.windows.count).max() ?? 1)
+    return CGFloat(maxWindowCount) * tabRowHeight + tabBarVerticalPadding
+  }
+
+  private func makeWindowGroups(from windows: [TmuxWindow]) -> [TmuxWindowGroup] {
+    var groups: [TmuxWindowGroup] = []
+
+    windows.forEach { window in
+      if let index = groups.firstIndex(where: { $0.currentPath == window.currentPath }) {
+        var groupWindows = groups[index].windows
+        groupWindows.append(window)
+        groups[index] = TmuxWindowGroup(currentPath: window.currentPath, windows: groupWindows)
+      } else {
+        groups.append(TmuxWindowGroup(currentPath: window.currentPath, windows: [window]))
+      }
+    }
+
+    return groups
   }
 
   @objc private func selectTab(_ sender: NSButton) {
@@ -959,6 +1089,8 @@ final class TerminalContainerView: NSView {
 }
 
 final class TabButton: NSButton {
+  var closeHandler: ((Int) -> Void)?
+
   var isActive = false {
     didSet {
       needsDisplay = true
@@ -995,6 +1127,15 @@ final class TabButton: NSButton {
     nil
   }
 
+  override func mouseDown(with event: NSEvent) {
+    if !isAddButton, closeRect.contains(convert(event.locationInWindow, from: nil)) {
+      closeHandler?(tag)
+      return
+    }
+
+    super.mouseDown(with: event)
+  }
+
   override func draw(_ dirtyRect: NSRect) {
     let rect = bounds.insetBy(dx: 0, dy: 0.5)
     let path = NSBezierPath(roundedRect: rect.insetBy(dx: 4, dy: 3), xRadius: 4, yRadius: 4)
@@ -1027,11 +1168,11 @@ final class TabButton: NSButton {
 
     if isActive {
       NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.86, alpha: 1).setFill()
-      NSRect(x: rect.minX + 18, y: rect.maxY - 3, width: max(0, rect.width - 36), height: 2).fill()
+      NSRect(x: rect.minX + 18, y: rect.maxY - 3, width: max(0, rect.width - 44), height: 2).fill()
     }
 
     let paragraphStyle = NSMutableParagraphStyle()
-    paragraphStyle.alignment = .center
+    paragraphStyle.alignment = isAddButton ? .center : .left
     paragraphStyle.lineBreakMode = .byTruncatingTail
 
     let attributes: [NSAttributedString.Key: Any] = [
@@ -1042,12 +1183,33 @@ final class TabButton: NSButton {
     let attributedTitle = NSAttributedString(string: title, attributes: attributes)
     let titleHeight = attributedTitle.size().height
     let titleRect = NSRect(
-      x: 10,
+      x: isAddButton ? 10 : 12,
       y: floor((bounds.height - titleHeight) / 2),
-      width: max(0, bounds.width - 20),
+      width: max(0, bounds.width - (isAddButton ? 20 : 34)),
       height: titleHeight
     )
     attributedTitle.draw(in: titleRect)
+
+    if !isAddButton {
+      drawCloseGlyph(in: closeRect, color: textColor)
+    }
+  }
+
+  private var closeRect: NSRect {
+    NSRect(x: bounds.maxX - 25, y: floor((bounds.height - 16) / 2), width: 16, height: 16)
+  }
+
+  private func drawCloseGlyph(in rect: NSRect, color: NSColor) {
+    let glyphRect = rect.insetBy(dx: 4.5, dy: 4.5)
+    let path = NSBezierPath()
+    path.move(to: NSPoint(x: glyphRect.minX, y: glyphRect.minY))
+    path.line(to: NSPoint(x: glyphRect.maxX, y: glyphRect.maxY))
+    path.move(to: NSPoint(x: glyphRect.minX, y: glyphRect.maxY))
+    path.line(to: NSPoint(x: glyphRect.maxX, y: glyphRect.minY))
+    color.withAlphaComponent(isHighlighted ? 0.95 : 0.70).setStroke()
+    path.lineWidth = 1.35
+    path.lineCapStyle = .round
+    path.stroke()
   }
 }
 
