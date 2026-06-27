@@ -222,6 +222,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
         return event
       }
 
+      if let terminalView = self.terminalView as? TmtermTerminalView,
+         terminalView.handleMarkedTextKeyDown(event)
+      {
+        return nil
+      }
+
       return self.handleTabShortcut(event) ? nil : event
     }
   }
@@ -613,17 +619,31 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     }
 
     markedText = attributedText
-    markedSelectedRange = selectedRange
+    markedSelectedRange = Self.caretRange(from: selectedRange, textLength: attributedText.length)
     markedTextView.text = attributedText.string
     markedTextView.font = font
     markedTextView.cellSize = currentCellSize()
     markedTextView.backgroundColor = backgroundColorAtCursor()
+    markedTextView.caretX = markedTextView.width(forTextUpToUTF16Offset: markedSelectedRange.location)
     markedTextView.isHidden = false
 
     if markedTextView.superview == nil {
       addSubview(markedTextView, positioned: .above, relativeTo: nil)
     }
     updateMarkedTextViewFrame()
+  }
+
+  func handleMarkedTextKeyDown(_ event: NSEvent) -> Bool {
+    guard hasMarkedText() else {
+      return false
+    }
+
+    if event.keyCode == Self.deleteKeyCode || event.isMarkedTextEditingControlKey {
+      _ = inputContext?.handleEvent(event)
+      return true
+    }
+
+    return false
   }
 
   override func unmarkText() {
@@ -684,6 +704,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     markedText = nil
     markedSelectedRange = NSRange(location: 0, length: 0)
     markedTextView.text = ""
+    markedTextView.caretX = 0
     markedTextView.isHidden = true
   }
 
@@ -714,7 +735,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     markedTextView.frame = NSRect(
       x: x,
       y: y,
-      width: max(textSize.width, bounds.maxX - x),
+      width: textSize.width,
       height: textSize.height
     )
   }
@@ -822,6 +843,16 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     return nil
   }
 
+  private static func caretRange(from selectedRange: NSRange, textLength: Int) -> NSRange {
+    guard selectedRange.location != NSNotFound else {
+      return NSRange(location: textLength, length: 0)
+    }
+
+    let location = min(max(0, selectedRange.location + selectedRange.length), textLength)
+    return NSRange(location: location, length: 0)
+  }
+
+  private static let deleteKeyCode: UInt16 = 51
 }
 
 private final class MarkedTextOverlayView: NSView {
@@ -833,6 +864,11 @@ private final class MarkedTextOverlayView: NSView {
   var font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
   var cellSize = NSSize(width: 8, height: 16)
   var backgroundColor = NSColor.black
+  var caretX: CGFloat = 0 {
+    didSet {
+      needsDisplay = true
+    }
+  }
 
   override var isFlipped: Bool {
     true
@@ -851,6 +887,17 @@ private final class MarkedTextOverlayView: NSView {
       width: ceil(CGFloat(Self.columnWidth(of: text)) * cellSize.width),
       height: ceil(cellSize.height)
     )
+  }
+
+  func width(forTextUpToUTF16Offset offset: Int) -> CGFloat {
+    guard offset > 0 else {
+      return 0
+    }
+
+    let nsString = text as NSString
+    let boundedOffset = min(offset, nsString.length)
+    let prefix = nsString.substring(with: NSRange(location: 0, length: boundedOffset))
+    return ceil(CGFloat(Self.columnWidth(of: prefix)) * cellSize.width)
   }
 
   override func draw(_ dirtyRect: NSRect) {
@@ -886,6 +933,9 @@ private final class MarkedTextOverlayView: NSView {
       (character as NSString).draw(in: characterRect, withAttributes: attributes)
       x += CGFloat(columnWidth) * cellSize.width
     }
+
+    NSColor(calibratedWhite: 1.0, alpha: 1.0).setFill()
+    NSRect(x: min(bounds.maxX - 1, caretX), y: 1, width: 1, height: max(0, bounds.height - 2)).fill()
   }
 
   private static func columnWidth(of string: String) -> Int {
@@ -985,6 +1035,14 @@ private extension String {
 }
 
 private extension NSEvent {
+  var isMarkedTextEditingControlKey: Bool {
+    guard modifierFlags.normalized.contains(.control) else {
+      return false
+    }
+
+    return ["a", "b", "e", "f", "h"].contains { matchesShortcutKey($0) }
+  }
+
   func matchesShortcutKey(_ key: String) -> Bool {
     if charactersIgnoringModifiers?.lowercased() == key {
       return true
