@@ -32,7 +32,7 @@ outputs = [".build/release/tmterm"]
 
 [tasks.dev]
 description = "Run tmterm"
-run = "swift run tmterm"
+run = "TMTERM_TMUX_SESSION=tmterm-dev swift run tmterm"
 
 [tasks.clean]
 description = "Remove generated build artifacts"

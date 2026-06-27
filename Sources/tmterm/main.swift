@@ -2,13 +2,13 @@ import AppKit
 import SwiftTerm
 
 final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
-  private let tmuxSessionName = "tmterm"
-  private let tmuxSocketPath: String = {
+  private let tmuxSessionName = ProcessInfo.processInfo.environment["TMTERM_TMUX_SESSION"] ?? "tmterm"
+  private lazy var tmuxSocketPath: String = {
     let directory = FileManager.default
       .homeDirectoryForCurrentUser
       .appendingPathComponent("Library/Application Support/tmterm", isDirectory: true)
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    return directory.appendingPathComponent("tmux.sock").path
+    return directory.appendingPathComponent("\(tmuxSessionName.socketSafeName).sock").path
   }()
   private let defaultFontSize: CGFloat = NSFont.systemFontSize
   private let minimumFontSize: CGFloat = 8
@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       backing: .buffered,
       defer: false
     )
-    window.title = "tmterm"
+    window.title = makeWindowTitle()
     window.contentView = contentView
     window.center()
     window.makeKeyAndOrderFront(nil)
@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
   func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-    window?.title = title.isEmpty ? "tmterm" : title
+    window?.title = makeWindowTitle(terminalTitle: title)
   }
 
   func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
@@ -154,6 +154,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     let clampedSize = min(max(size, minimumFontSize), maximumFontSize)
     terminalView.font = NSFont.monospacedSystemFont(ofSize: clampedSize, weight: .regular)
     terminalView.needsDisplay = true
+  }
+
+  private func makeWindowTitle(terminalTitle: String? = nil) -> String {
+    let baseTitle = terminalTitle?.isEmpty == false ? terminalTitle! : "tmterm"
+    return "\(baseTitle) \(windowTitleSuffix)"
+  }
+
+  private var windowTitleSuffix: String {
+    var components: [String] = []
+
+    if tmuxSessionName != "tmterm" {
+      components.append("Dev")
+    }
+
+    components.append(Self.buildConfigurationName)
+    return "[\(components.joined(separator: ", "))]"
+  }
+
+  private static var buildConfigurationName: String {
+    #if DEBUG
+      "Debug"
+    #else
+      "Release"
+    #endif
   }
 
   private func installTabShortcutMonitor() {
@@ -385,6 +409,16 @@ private extension CursorStyle {
     case .blinkBar, .steadyBar:
       return .steadyBar
     }
+  }
+}
+
+private extension String {
+  var socketSafeName: String {
+    map { character in
+      character.isLetter || character.isNumber || character == "-" || character == "_"
+        ? String(character)
+        : "-"
+    }.joined()
   }
 }
 
