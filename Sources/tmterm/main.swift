@@ -936,6 +936,7 @@ final class TerminalContainerView: NSView {
   private let tabRowHeight: CGFloat = 30
   private let tabBarVerticalPadding: CGFloat = 8
   private var windows: [TmuxWindow] = []
+  private var topWindowIndexByPath: [String: Int] = [:]
   var tmuxWindows: [TmuxWindow] {
     windows
   }
@@ -1003,6 +1004,7 @@ final class TerminalContainerView: NSView {
     }
 
     self.windows = windows
+    rememberActiveWindowPositions(in: windows)
     needsLayout = true
     needsDisplay = true
     tabBar.arrangedSubviews.forEach { view in
@@ -1070,13 +1072,38 @@ final class TerminalContainerView: NSView {
       if let index = groups.firstIndex(where: { $0.currentPath == window.currentPath }) {
         var groupWindows = groups[index].windows
         groupWindows.append(window)
-        groups[index] = TmuxWindowGroup(currentPath: window.currentPath, windows: groupWindows)
+        groups[index] = TmuxWindowGroup(
+          currentPath: window.currentPath,
+          windows: orderedWindows(groupWindows, currentPath: window.currentPath)
+        )
       } else {
         groups.append(TmuxWindowGroup(currentPath: window.currentPath, windows: [window]))
       }
     }
 
     return groups
+  }
+
+  private func rememberActiveWindowPositions(in windows: [TmuxWindow]) {
+    windows.forEach { window in
+      if window.isActive {
+        topWindowIndexByPath[window.currentPath] = window.index
+      }
+    }
+  }
+
+  private func orderedWindows(_ windows: [TmuxWindow], currentPath: String) -> [TmuxWindow] {
+    guard
+      let topWindowIndex = topWindowIndexByPath[currentPath],
+      let topIndex = windows.firstIndex(where: { $0.index == topWindowIndex })
+    else {
+      return windows
+    }
+
+    var orderedWindows = windows
+    let topWindow = orderedWindows.remove(at: topIndex)
+    orderedWindows.insert(topWindow, at: 0)
+    return orderedWindows
   }
 
   @objc private func selectTab(_ sender: NSButton) {
@@ -1090,6 +1117,12 @@ final class TerminalContainerView: NSView {
 
 final class TabButton: NSButton {
   var closeHandler: ((Int) -> Void)?
+  private var isMouseInside = false {
+    didSet {
+      needsDisplay = true
+    }
+  }
+  private var trackingArea: NSTrackingArea?
 
   var isActive = false {
     didSet {
@@ -1125,6 +1158,31 @@ final class TabButton: NSButton {
 
   required init?(coder: NSCoder) {
     nil
+  }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+
+    if let trackingArea {
+      removeTrackingArea(trackingArea)
+    }
+
+    let trackingArea = NSTrackingArea(
+      rect: bounds,
+      options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+      owner: self,
+      userInfo: nil
+    )
+    addTrackingArea(trackingArea)
+    self.trackingArea = trackingArea
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    isMouseInside = true
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    isMouseInside = false
   }
 
   override func mouseDown(with event: NSEvent) {
@@ -1190,7 +1248,7 @@ final class TabButton: NSButton {
     )
     attributedTitle.draw(in: titleRect)
 
-    if !isAddButton {
+    if !isAddButton, isMouseInside {
       drawCloseGlyph(in: closeRect, color: textColor)
     }
   }
