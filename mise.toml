@@ -1,0 +1,31 @@
+[tasks.app]
+description = "Build the release app bundle"
+run = 'CONFIGURATION=release APP_DIR="$PWD/dist/release/tmterm.app" ./scripts/build-app.sh'
+sources = ["Package.swift", "Package.resolved", "Sources/**/*.swift", "scripts/build-app.sh"]
+outputs = ["dist/release/tmterm.app/Contents/MacOS/tmterm", "dist/release/tmterm.app/Contents/Info.plist"]
+
+[tasks.debug-app]
+description = "Build the debug app bundle"
+run = 'CONFIGURATION=debug APP_DIR="$PWD/dist/debug/tmterm.app" ./scripts/build-app.sh'
+sources = ["Package.swift", "Package.resolved", "Sources/**/*.swift", "scripts/build-app.sh"]
+outputs = ["dist/debug/tmterm.app/Contents/MacOS/tmterm", "dist/debug/tmterm.app/Contents/Info.plist"]
+
+[tasks.build]
+description = "Build the debug executable"
+run = "swift build"
+sources = ["Package.swift", "Package.resolved", "Sources/**/*.swift"]
+outputs = [".build/debug/tmterm"]
+
+[tasks.release-build]
+description = "Build the release executable"
+run = "swift build -c release"
+sources = ["Package.swift", "Package.resolved", "Sources/**/*.swift"]
+outputs = [".build/release/tmterm"]
+
+[tasks.dev]
+description = "Run tmterm"
+run = "swift run tmterm"
+
+[tasks.clean]
+description = "Remove generated build artifacts"
+run = "rm -rf dist && swift package clean"
