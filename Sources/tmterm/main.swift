@@ -220,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
       return false
     }
 
-    if event.modifierFlags.normalized.contains(.control), event.matchesShortcutKey("e") {
+    if event.modifierFlags.normalized.contains(.control), event.matchesShortcutKey("w") {
       isWaitingForTabShortcut = true
       return true
     }
@@ -460,9 +460,9 @@ private extension NSEvent {
 
   private static let shortcutKeyCodes: [String: UInt16] = [
     "c": 8,
-    "e": 14,
     "h": 4,
-    "l": 37
+    "l": 37,
+    "w": 13
   ]
 }
 
