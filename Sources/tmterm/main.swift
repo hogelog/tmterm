@@ -35,8 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     terminalView.processDelegate = self
     terminalView.autoresizingMask = [.width, .height]
     terminalView.applyDefaultColorScheme()
-    terminalView.terminal.options.cursorStyle = .steadyBlock
-    terminalView.cursorStyleChanged(source: terminalView.terminal, newStyle: .steadyBlock)
+    terminalView.terminal.options.cursorStyle = .steadyBar
+    terminalView.cursorStyleChanged(source: terminalView.terminal, newStyle: .steadyBar)
     terminalView.caretViewTracksFocus = false
     let contentView = TerminalContainerView(terminalView: terminalView)
     contentView.onSelectTab = { [weak self] index in
@@ -422,20 +422,7 @@ struct TmuxWindow: Equatable {
 
 final class TmtermTerminalView: LocalProcessTerminalView {
   override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
-    super.cursorStyleChanged(source: source, newStyle: newStyle.steady)
-  }
-}
-
-private extension CursorStyle {
-  var steady: CursorStyle {
-    switch self {
-    case .blinkBlock, .steadyBlock:
-      return .steadyBlock
-    case .blinkUnderline, .steadyUnderline:
-      return .steadyUnderline
-    case .blinkBar, .steadyBar:
-      return .steadyBar
-    }
+    super.cursorStyleChanged(source: source, newStyle: .steadyBar)
   }
 }
 
