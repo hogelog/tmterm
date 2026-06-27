@@ -1,8 +1,9 @@
 import AppKit
 import SwiftTerm
 
-final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSWindowDelegate {
   private let tmuxSessionName = ProcessInfo.processInfo.environment["TMTERM_TMUX_SESSION"] ?? "tmterm"
+  private var config = AppConfig.load()
   private lazy var tmuxSocketPath: String = {
     let directory = FileManager.default
       .homeDirectoryForCurrentUser
@@ -57,14 +58,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     )
     window.title = makeWindowTitle()
     window.contentView = contentView
-    window.center()
+    if let windowFrame = config.windowFrame {
+      window.setFrame(windowFrame, display: false)
+    } else {
+      window.center()
+    }
     window.makeKeyAndOrderFront(nil)
+    window.delegate = self
 
     self.window = window
     self.contentView = contentView
     self.terminalView = terminalView
 
     NSApp.activate(ignoringOtherApps: true)
+    setFontSize(config.fontSize ?? defaultFontSize)
     window.makeFirstResponder(terminalView)
     startTmux()
     installTabShortcutMonitor()
@@ -75,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    saveWindowFrame()
     if let tabShortcutMonitor {
       NSEvent.removeMonitor(tabShortcutMonitor)
     }
@@ -84,6 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     true
+  }
+
+  func windowDidMove(_ notification: Notification) {
+    saveWindowFrame()
+  }
+
+  func windowDidResize(_ notification: Notification) {
+    saveWindowFrame()
   }
 
   private func startTmux() {
@@ -163,6 +179,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     let clampedSize = min(max(size, minimumFontSize), maximumFontSize)
     terminalView.font = NSFont.monospacedSystemFont(ofSize: clampedSize, weight: .regular)
     terminalView.needsDisplay = true
+    config.fontSize = clampedSize
+    config.save()
+  }
+
+  private func saveWindowFrame() {
+    guard let window else {
+      return
+    }
+
+    config.windowFrame = window.frame
+    config.save()
   }
 
   private func makeWindowTitle(terminalTitle: String? = nil) -> String {
@@ -482,6 +509,84 @@ struct TmuxWindow: Equatable {
 struct TmuxWindowGroup: Equatable {
   let currentPath: String
   let windows: [TmuxWindow]
+}
+
+private struct AppConfig: Codable {
+  var fontSize: CGFloat?
+  var windowFrame: NSRect? {
+    get {
+      windowFrameValue?.rect
+    }
+    set {
+      windowFrameValue = newValue.map(WindowFrameValue.init(rect:))
+    }
+  }
+
+  private var windowFrameValue: WindowFrameValue?
+
+  private enum CodingKeys: String, CodingKey {
+    case fontSize
+    case windowFrameValue = "windowFrame"
+  }
+
+  static func load() -> AppConfig {
+    guard
+      let data = try? Data(contentsOf: configURL),
+      let config = try? JSONDecoder().decode(AppConfig.self, from: data)
+    else {
+      return AppConfig()
+    }
+
+    return config
+  }
+
+  func save() {
+    do {
+      try FileManager.default.createDirectory(at: Self.configDirectory, withIntermediateDirectories: true)
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      let data = try encoder.encode(self)
+      try data.write(to: Self.configURL, options: .atomic)
+    } catch {
+      NSLog("Failed to save tmterm config: \(error)")
+    }
+  }
+
+  private static var configDirectory: URL {
+    if
+      let xdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"],
+      !xdgConfigHome.isEmpty
+    {
+      return URL(fileURLWithPath: xdgConfigHome, isDirectory: true)
+        .appendingPathComponent("tmterm", isDirectory: true)
+    }
+
+    return FileManager.default
+      .homeDirectoryForCurrentUser
+      .appendingPathComponent(".config/tmterm", isDirectory: true)
+  }
+
+  private static var configURL: URL {
+    configDirectory.appendingPathComponent("config.json")
+  }
+}
+
+private struct WindowFrameValue: Codable {
+  let x: CGFloat
+  let y: CGFloat
+  let width: CGFloat
+  let height: CGFloat
+
+  init(rect: NSRect) {
+    x = rect.origin.x
+    y = rect.origin.y
+    width = rect.size.width
+    height = rect.size.height
+  }
+
+  var rect: NSRect {
+    NSRect(x: x, y: y, width: width, height: height)
+  }
 }
 
 final class TmtermTerminalView: LocalProcessTerminalView {
