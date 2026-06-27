@@ -687,7 +687,7 @@ app.run()
 
 private extension LocalProcessTerminalView {
   func applyDefaultColorScheme() {
-    nativeForegroundColor = NSColor(calibratedRed: 0.82, green: 0.85, blue: 0.88, alpha: 1.0)
+    nativeForegroundColor = NSColor(calibratedWhite: 1.0, alpha: 1.0)
     nativeBackgroundColor = NSColor(calibratedRed: 0.035, green: 0.043, blue: 0.05, alpha: 1.0)
     caretColor = NSColor(calibratedRed: 0.46, green: 0.54, blue: 0.64, alpha: 1.0)
     caretTextColor = nativeBackgroundColor
@@ -698,21 +698,21 @@ private extension LocalProcessTerminalView {
 
   private static let defaultAnsiColors = [
     terminalColor(red: 9, green: 11, blue: 13),
-    terminalColor(red: 209, green: 102, blue: 97),
-    terminalColor(red: 135, green: 191, blue: 117),
-    terminalColor(red: 218, green: 176, blue: 93),
-    terminalColor(red: 112, green: 157, blue: 217),
-    terminalColor(red: 184, green: 130, blue: 207),
-    terminalColor(red: 103, green: 192, blue: 200),
-    terminalColor(red: 196, green: 204, blue: 212),
-    terminalColor(red: 93, green: 102, blue: 111),
-    terminalColor(red: 229, green: 125, blue: 118),
-    terminalColor(red: 158, green: 211, blue: 137),
-    terminalColor(red: 235, green: 196, blue: 117),
-    terminalColor(red: 137, green: 178, blue: 233),
-    terminalColor(red: 203, green: 151, blue: 224),
-    terminalColor(red: 126, green: 213, blue: 219),
-    terminalColor(red: 224, green: 229, blue: 235)
+    terminalColor(red: 226, green: 92, blue: 87),
+    terminalColor(red: 128, green: 210, blue: 112),
+    terminalColor(red: 232, green: 185, blue: 85),
+    terminalColor(red: 102, green: 162, blue: 235),
+    terminalColor(red: 198, green: 128, blue: 230),
+    terminalColor(red: 89, green: 204, blue: 216),
+    terminalColor(red: 218, green: 224, blue: 232),
+    terminalColor(red: 112, green: 122, blue: 134),
+    terminalColor(red: 246, green: 113, blue: 106),
+    terminalColor(red: 154, green: 232, blue: 132),
+    terminalColor(red: 249, green: 205, blue: 105),
+    terminalColor(red: 125, green: 184, blue: 255),
+    terminalColor(red: 218, green: 154, blue: 246),
+    terminalColor(red: 111, green: 226, blue: 238),
+    terminalColor(red: 244, green: 247, blue: 250)
   ]
 
   private static func terminalColor(red: UInt16, green: UInt16, blue: UInt16) -> Color {
