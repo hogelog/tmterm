@@ -120,8 +120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     var arguments: [String] = []
     if let tmuxConfigPath = config.resolvedTmuxConfigPath() {
       arguments.append(contentsOf: ["-f", tmuxConfigPath])
-    } else {
-      arguments.append(contentsOf: ["-f", "/dev/null"])
     }
     arguments.append(contentsOf: [
       "new-session",
@@ -306,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
         return true
       }
 
-      return false
+      return forwardTabShortcutToTerminal(with: event)
     }
 
     if event.modifierFlags.normalized.contains(.control), event.matchesShortcutKey("w") {
@@ -315,6 +313,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     }
 
     return false
+  }
+
+  private func forwardTabShortcutToTerminal(with event: NSEvent) -> Bool {
+    guard
+      let tmuxKeyName = event.tmuxKeyName,
+      let tmuxClientName = activeTmuxClientName()
+    else {
+      return false
+    }
+
+    runTmux(arguments: ["send-keys", "-K", "-c", tmuxClientName, "C-w", tmuxKeyName])
+    return true
+  }
+
+  private func activeTmuxClientName() -> String? {
+    tmuxOutput(
+      arguments: [
+        "list-clients",
+        "-t",
+        tmuxSessionName,
+        "-F",
+        "#{client_name}"
+      ]
+    )?
+      .split(separator: "\n")
+      .map(String.init)
+      .first
   }
 
   private func scrollTmux(lines: Int) {
@@ -1165,6 +1190,25 @@ private extension NSEvent {
     }
 
     return ["a", "b", "e", "f", "h"].contains { matchesShortcutKey($0) }
+  }
+
+  var tmuxKeyName: String? {
+    if modifierFlags.normalized.contains(.control),
+       let character = charactersIgnoringModifiers?.lowercased(),
+       character.count == 1
+    {
+      return "C-\(character)"
+    }
+
+    guard let charactersIgnoringModifiers, !charactersIgnoringModifiers.isEmpty else {
+      return nil
+    }
+
+    if charactersIgnoringModifiers == " " {
+      return "Space"
+    }
+
+    return charactersIgnoringModifiers.count == 1 ? charactersIgnoringModifiers : nil
   }
 
   func matchesShortcutKey(_ key: String) -> Bool {

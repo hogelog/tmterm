@@ -36,5 +36,6 @@ Commands:
 ## Configuration
 
 tmterm reads tmux settings from `tmuxConfigPath` in
-`~/.config/tmterm/config.json` when configured. It keeps tmux's status line
-hidden because tmux windows are rendered with the native tab bar.
+`~/.config/tmterm/config.json` when configured. Otherwise, tmux uses its normal
+configuration loading. tmterm keeps tmux's status line hidden because tmux
+windows are rendered with the native tab bar.
