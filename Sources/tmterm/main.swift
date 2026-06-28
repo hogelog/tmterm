@@ -1,7 +1,8 @@
 import AppKit
 import SwiftTerm
 
-final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSWindowDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalProcessTerminalViewDelegate, NSWindowDelegate {
   private let tmuxSessionName = ProcessInfo.processInfo.environment["TMTERM_TMUX_SESSION"] ?? "tmterm"
   private var config = AppConfig.load()
   private lazy var tmuxSocketPath: String = {
@@ -80,7 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
     installScrollWheelMonitor()
     refreshTabs()
     tabRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-      self?.refreshTabs()
+      Task { @MainActor in
+        self?.refreshTabs()
+      }
     }
   }
 
