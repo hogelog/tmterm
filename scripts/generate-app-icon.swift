@@ -29,32 +29,20 @@ for size in sizes {
   let image = NSImage(size: NSSize(width: pixels, height: pixels))
   image.lockFocus()
 
-  NSColor(deviceRed: 0.035, green: 0.043, blue: 0.050, alpha: 1).setFill()
+  NSColor(deviceRed: 0.45, green: 0.62, blue: 0.86, alpha: 1).setFill()
   NSBezierPath(
     roundedRect: NSRect(x: 0, y: 0, width: pixels, height: pixels),
     xRadius: CGFloat(pixels) * 0.22,
     yRadius: CGFloat(pixels) * 0.22
   ).fill()
 
-  NSColor(deviceRed: 0.45, green: 0.62, blue: 0.86, alpha: 1).setFill()
-  NSBezierPath(
-    roundedRect: NSRect(
-      x: CGFloat(pixels) * 0.12,
-      y: CGFloat(pixels) * 0.12,
-      width: CGFloat(pixels) * 0.76,
-      height: CGFloat(pixels) * 0.76
-    ),
-    xRadius: CGFloat(pixels) * 0.08,
-    yRadius: CGFloat(pixels) * 0.08
-  ).fill()
-
   NSColor(deviceRed: 0.055, green: 0.065, blue: 0.075, alpha: 1).setFill()
   NSBezierPath(
     roundedRect: NSRect(
-      x: CGFloat(pixels) * 0.17,
-      y: CGFloat(pixels) * 0.23,
-      width: CGFloat(pixels) * 0.66,
-      height: CGFloat(pixels) * 0.54
+      x: CGFloat(pixels) * 0.10,
+      y: CGFloat(pixels) * 0.15,
+      width: CGFloat(pixels) * 0.80,
+      height: CGFloat(pixels) * 0.70
     ),
     xRadius: CGFloat(pixels) * 0.04,
     yRadius: CGFloat(pixels) * 0.04
