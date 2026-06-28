@@ -60,20 +60,15 @@ for size in sizes {
     yRadius: CGFloat(pixels) * 0.04
   ).fill()
 
-  let promptRect = NSRect(
-    x: CGFloat(pixels) * 0.25,
-    y: CGFloat(pixels) * 0.40,
-    width: CGFloat(pixels) * 0.50,
-    height: CGFloat(pixels) * 0.24
-  )
-  let paragraph = NSMutableParagraphStyle()
-  paragraph.alignment = .center
-  let attributes: [NSAttributedString.Key: Any] = [
-    .font: NSFont.monospacedSystemFont(ofSize: CGFloat(pixels) * 0.20, weight: .bold),
-    .foregroundColor: NSColor(deviceRed: 0.86, green: 0.91, blue: 0.96, alpha: 1),
-    .paragraphStyle: paragraph
-  ]
-  ("tm" as NSString).draw(in: promptRect, withAttributes: attributes)
+  NSColor(deviceRed: 0.86, green: 0.91, blue: 0.96, alpha: 1).setStroke()
+  let promptPath = NSBezierPath()
+  promptPath.lineWidth = max(1, CGFloat(pixels) * 0.035)
+  promptPath.lineCapStyle = .round
+  promptPath.lineJoinStyle = .round
+  promptPath.move(to: NSPoint(x: CGFloat(pixels) * 0.29, y: CGFloat(pixels) * 0.58))
+  promptPath.line(to: NSPoint(x: CGFloat(pixels) * 0.39, y: CGFloat(pixels) * 0.50))
+  promptPath.line(to: NSPoint(x: CGFloat(pixels) * 0.29, y: CGFloat(pixels) * 0.42))
+  promptPath.stroke()
 
   NSColor(deviceRed: 0.50, green: 0.82, blue: 0.62, alpha: 1).setFill()
   NSRect(

@@ -1,6 +1,6 @@
 # tmterm
 
-<img src="assets/tmterm-icon.png" width="96" alt="tmterm icon">
+<img src="assets/tmterm.png" width="96" alt="tmterm icon">
 
 tmterm is a native macOS terminal prototype built with SwiftTerm and tmux.
 
