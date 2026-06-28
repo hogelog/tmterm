@@ -16,8 +16,15 @@ tabs by their current directory.
 
 Development also requires:
 
-- Swift 5.9 or later
+- mise
+- Swift
 - Xcode Command Line Tools
+
+Install the pinned Swift toolchain:
+
+```sh
+mise install
+```
 
 Run the app during development:
 

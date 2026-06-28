@@ -1,3 +1,6 @@
+[tools]
+swift = "6.3.2"
+
 [tasks.app]
 description = "Build the debug app bundle"
 depends = ["app:debug"]
