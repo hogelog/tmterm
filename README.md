@@ -20,12 +20,6 @@ Development also requires:
 - Swift
 - Xcode Command Line Tools
 
-Install the pinned Swift toolchain:
-
-```sh
-mise install
-```
-
 Run the app during development:
 
 ```sh
