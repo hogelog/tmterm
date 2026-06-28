@@ -648,6 +648,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private let markedTextView = MarkedTextOverlayView(frame: .zero)
   private var markedText: NSAttributedString?
   private var markedSelectedRange = NSRange(location: 0, length: 0)
+  private var nativeCaretColorsBeforeMarkedText: (caretColor: NSColor, caretTextColor: NSColor?)?
   private var preciseScrollRemainder: CGFloat = 0
 
   override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
@@ -670,6 +671,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
 
     markedText = attributedText
     markedSelectedRange = Self.caretRange(from: selectedRange, textLength: attributedText.length)
+    hideNativeCaretForMarkedText()
     markedTextView.text = attributedText.string
     markedTextView.font = font
     markedTextView.cellSize = currentCellSize()
@@ -778,9 +780,30 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private func clearMarkedText() {
     markedText = nil
     markedSelectedRange = NSRange(location: 0, length: 0)
+    restoreNativeCaretAfterMarkedText()
     markedTextView.text = ""
     markedTextView.caretX = 0
     markedTextView.isHidden = true
+  }
+
+  private func hideNativeCaretForMarkedText() {
+    guard nativeCaretColorsBeforeMarkedText == nil else {
+      return
+    }
+
+    nativeCaretColorsBeforeMarkedText = (caretColor, caretTextColor)
+    caretColor = .clear
+    caretTextColor = .clear
+  }
+
+  private func restoreNativeCaretAfterMarkedText() {
+    guard let nativeCaretColorsBeforeMarkedText else {
+      return
+    }
+
+    caretColor = nativeCaretColorsBeforeMarkedText.caretColor
+    caretTextColor = nativeCaretColorsBeforeMarkedText.caretTextColor
+    self.nativeCaretColorsBeforeMarkedText = nil
   }
 
   private func updateMarkedTextViewFrame() {
