@@ -20,23 +20,11 @@ Development also requires:
 - Swift
 - Xcode Command Line Tools
 
-Run the app during development:
+Commands:
 
-```sh
-mise run dev
-```
-
-Build the debug executable:
-
-```sh
-mise run build
-```
-
-Build a debug app bundle:
-
-```sh
-mise run app
-```
+- `mise run dev`: run tmterm
+- `mise run build`: build the debug executable
+- `mise run app`: build a debug app bundle
 
 ## Shortcuts
 
