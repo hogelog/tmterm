@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     terminalView.terminal.options.cursorStyle = .steadyBar
     terminalView.cursorStyleChanged(source: terminalView.terminal, newStyle: .steadyBar)
     terminalView.caretViewTracksFocus = false
+    terminalView.allowMouseReporting = false
     let contentView = TerminalContainerView(terminalView: terminalView)
     contentView.onSelectTab = { [weak self] index in
       self?.selectTmuxWindow(index: index)
@@ -79,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     startTmux()
     installTabShortcutMonitor()
     installScrollWheelMonitor()
-    refreshTabs()
+    refreshTabs(force: true)
     tabRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
       Task { @MainActor in
         self?.refreshTabs()
@@ -409,7 +410,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     ["-S", tmuxSocketPath] + arguments
   }
 
-  private func refreshTabs() {
+  private func refreshTabs(force: Bool = false) {
+    if !force, terminalView?.selectionActive == true {
+      return
+    }
+
     guard
       let output = tmuxOutput(arguments: [
         "list-windows",
@@ -444,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
 
   private func selectTmuxWindow(index: Int) {
     runTmux(arguments: ["select-window", "-t", "\(tmuxSessionName):\(index)"])
-    refreshTabs()
+    refreshTabs(force: true)
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
@@ -486,7 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
 
   private func createTmuxWindow() {
     runTmux(arguments: ["new-window", "-t", tmuxSessionName])
-    refreshTabs()
+    refreshTabs(force: true)
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
@@ -495,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
       runTmux(arguments: ["select-window", "-t", "\(tmuxSessionName):\(nextWindowIndex)"])
     }
     runTmux(arguments: ["kill-window", "-t", "\(tmuxSessionName):\(index)"])
-    refreshTabs()
+    refreshTabs(force: true)
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
