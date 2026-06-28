@@ -32,3 +32,9 @@ Commands:
 - `Ctrl-W h` / `Ctrl-W l`: move between directory groups
 - `Ctrl-W j` / `Ctrl-W k`: move within a directory group
 - `Ctrl-W 0` ... `Ctrl-W 9`: select tmux window by index
+
+## Configuration
+
+tmterm reads tmux settings from `tmuxConfigPath` in
+`~/.config/tmterm/config.json` when configured. It keeps tmux's status line
+hidden because tmux windows are rendered with the native tab bar.

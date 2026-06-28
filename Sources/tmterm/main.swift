@@ -117,29 +117,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     }
 
     let home = FileManager.default.homeDirectoryForCurrentUser.path
+    var arguments: [String] = []
+    if let tmuxConfigPath = config.resolvedTmuxConfigPath() {
+      arguments.append(contentsOf: ["-f", tmuxConfigPath])
+    } else {
+      arguments.append(contentsOf: ["-f", "/dev/null"])
+    }
+    arguments.append(contentsOf: [
+      "new-session",
+      "-A",
+      "-s",
+      tmuxSessionName,
+      ";",
+      "set-option",
+      "-t",
+      tmuxSessionName,
+      "status",
+      "off"
+    ])
 
     terminalView.startProcess(
       executable: tmuxExecutable,
-      args: tmuxArguments([
-        "-f",
-        "/dev/null",
-        "new-session",
-        "-A",
-        "-s",
-        tmuxSessionName,
-        ";",
-        "set-option",
-        "-t",
-        tmuxSessionName,
-        "status",
-        "off",
-        ";",
-        "set-option",
-        "-t",
-        tmuxSessionName,
-        "prefix",
-        "None"
-      ]),
+      args: tmuxArguments(arguments),
       environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"),
       execName: "tmux",
       currentDirectory: home
@@ -568,6 +567,7 @@ struct TmuxWindowGroup: Equatable {
 
 private struct AppConfig: Codable {
   var fontSize: CGFloat?
+  var tmuxConfigPath: String?
   var windowFrame: NSRect? {
     get {
       windowFrameValue?.rect
@@ -581,6 +581,7 @@ private struct AppConfig: Codable {
 
   private enum CodingKeys: String, CodingKey {
     case fontSize
+    case tmuxConfigPath
     case windowFrameValue = "windowFrame"
   }
 
@@ -605,6 +606,18 @@ private struct AppConfig: Codable {
     } catch {
       NSLog("Failed to save tmterm config: \(error)")
     }
+  }
+
+  func resolvedTmuxConfigPath() -> String? {
+    guard let configuredPath = tmuxConfigPath.map(Self.expandPath) else {
+      return nil
+    }
+
+    return FileManager.default.fileExists(atPath: configuredPath) ? configuredPath : nil
+  }
+
+  private static func expandPath(_ path: String) -> String {
+    (path as NSString).expandingTildeInPath
   }
 
   private static var configDirectory: URL {
