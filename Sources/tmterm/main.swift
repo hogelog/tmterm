@@ -464,6 +464,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, LocalProcessTerminalVi
   }
 
   private func closeTmuxWindow(index: Int) {
+    if let nextWindowIndex = contentView?.windowIndexToSelect(afterClosing: index) {
+      runTmux(arguments: ["select-window", "-t", "\(tmuxSessionName):\(nextWindowIndex)"])
+    }
     runTmux(arguments: ["kill-window", "-t", "\(tmuxSessionName):\(index)"])
     refreshTabs()
     terminalView?.window?.makeFirstResponder(terminalView)
@@ -1273,7 +1276,7 @@ final class TerminalContainerView: NSView {
       groupStack.addArrangedSubview(label)
 
       group.windows.forEach { window in
-        let title = window.name.isEmpty ? "\(window.index)" : "\(window.index)  \(window.name)"
+        let title = window.name.isEmpty ? "\(window.index):" : "\(window.index): \(window.name)"
         let button = TabButton(title: title)
         button.isActive = window.isActive
         button.target = self
@@ -1371,6 +1374,29 @@ final class TerminalContainerView: NSView {
     }
 
     return group.windows.first?.index
+  }
+
+  func windowIndexToSelect(afterClosing windowIndex: Int) -> Int? {
+    guard
+      let group = tmuxWindowGroups.first(where: { group in
+        group.windows.contains(where: { $0.index == windowIndex })
+      }),
+      let closingPosition = group.windows.firstIndex(where: { $0.index == windowIndex })
+    else {
+      return nil
+    }
+
+    let nextPosition = closingPosition + 1
+    if group.windows.indices.contains(nextPosition) {
+      return group.windows[nextPosition].index
+    }
+
+    let previousPosition = closingPosition - 1
+    if group.windows.indices.contains(previousPosition) {
+      return group.windows[previousPosition].index
+    }
+
+    return nil
   }
 
   private func displayName(forCurrentPath currentPath: String) -> String {
