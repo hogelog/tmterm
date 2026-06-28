@@ -1,5 +1,7 @@
 # tmterm
 
+<img src="docs/tmterm-icon.png" width="96" alt="tmterm icon">
+
 tmterm is a native macOS terminal prototype built with SwiftTerm and tmux.
 
 It runs a private tmux session, renders tmux windows as native tabs, and groups
