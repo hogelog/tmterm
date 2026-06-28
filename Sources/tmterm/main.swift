@@ -1348,7 +1348,13 @@ final class TerminalContainerView: NSView {
       }
     }
 
-    return groups
+    return groups.sorted { lhs, rhs in
+      let comparison = lhs.currentPath.localizedStandardCompare(rhs.currentPath)
+      if comparison == .orderedSame {
+        return lhs.currentPath < rhs.currentPath
+      }
+      return comparison == .orderedAscending
+    }
   }
 
   private func rememberActiveWindowPositions(in windows: [TmuxWindow]) {
