@@ -11,10 +11,13 @@ tabs by their current directory.
 
 - macOS
 - tmux
-- Swift 5.9 or later
-- Xcode Command Line Tools
 
 ## Development
+
+Development also requires:
+
+- Swift 5.9 or later
+- Xcode Command Line Tools
 
 Run the app during development:
 
