@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
   private var window: NSWindow?
   private var contentView: TerminalContainerView?
   private var terminalView: LocalProcessTerminalView?
+  private var selectionWindowIndex: Int?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     changeCurrentDirectoryToHome()
@@ -43,6 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     terminalView.cursorStyleChanged(source: terminalView.terminal, newStyle: .steadyBar)
     terminalView.caretViewTracksFocus = false
     terminalView.allowMouseReporting = false
+    terminalView.onSelectionChanged = { [weak self] isActive in
+      guard let self else {
+        return
+      }
+      self.selectionWindowIndex = isActive ? self.contentView?.activeWindowIndex : nil
+    }
     let contentView = TerminalContainerView(terminalView: terminalView)
     contentView.onSelectTab = { [weak self] index in
       self?.selectTmuxWindow(index: index)
@@ -324,6 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
       return false
     }
 
+    if tmuxKeyName == "[" {
+      terminalView?.selectNone()
+    }
     runTmux(arguments: ["send-keys", "-K", "-c", tmuxClientName, "C-w", tmuxKeyName])
     return true
   }
@@ -348,6 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
       return
     }
 
+    terminalView?.selectNone()
     if lines > 0 {
       runTmux(arguments: ["copy-mode", "-e"])
       runTmux(arguments: ["send-keys", "-t", tmuxSessionName, "-X", "-N", "\(lines)", "scroll-up"])
@@ -411,10 +422,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
   }
 
   private func refreshTabs(force: Bool = false) {
-    if !force, terminalView?.selectionActive == true {
-      return
-    }
-
     guard
       let output = tmuxOutput(arguments: [
         "list-windows",
@@ -444,10 +451,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
         )
       }
 
+    if !force, terminalView?.selectionActive == true {
+      if let selectionWindowIndex,
+         let activeWindowIndex = windows.first(where: \.isActive)?.index,
+         activeWindowIndex != selectionWindowIndex
+      {
+        terminalView?.selectNone()
+      } else {
+        return
+      }
+    }
+
     contentView?.setTabs(windows)
   }
 
   private func selectTmuxWindow(index: Int) {
+    terminalView?.selectNone()
     runTmux(arguments: ["select-window", "-t", "\(tmuxSessionName):\(index)"])
     refreshTabs(force: true)
     terminalView?.window?.makeFirstResponder(terminalView)
@@ -490,12 +509,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
   }
 
   private func createTmuxWindow() {
+    terminalView?.selectNone()
     runTmux(arguments: ["new-window", "-t", tmuxSessionName])
     refreshTabs(force: true)
     terminalView?.window?.makeFirstResponder(terminalView)
   }
 
   private func closeTmuxWindow(index: Int) {
+    terminalView?.selectNone()
     if let nextWindowIndex = contentView?.windowIndexToSelect(afterClosing: index) {
       runTmux(arguments: ["select-window", "-t", "\(tmuxSessionName):\(nextWindowIndex)"])
     }
@@ -693,6 +714,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private var markedSelectedRange = NSRange(location: 0, length: 0)
   private var nativeCaretColorsBeforeMarkedText: (caretColor: NSColor, caretTextColor: NSColor?)?
   private var preciseScrollRemainder: CGFloat = 0
+  var onSelectionChanged: ((Bool) -> Void)?
 
   override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
     super.cursorStyleChanged(source: source, newStyle: .steadyBar)
@@ -818,6 +840,11 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   override func layout() {
     super.layout()
     updateMarkedTextViewFrame()
+  }
+
+  override func selectionChanged(source: Terminal) {
+    super.selectionChanged(source: source)
+    onSelectionChanged?(selectionActive)
   }
 
   private func clearMarkedText() {
@@ -1276,6 +1303,9 @@ final class TerminalContainerView: NSView {
   private var selectedWindowIndexByPath: [String: Int] = [:]
   var tmuxWindows: [TmuxWindow] {
     windows
+  }
+  var activeWindowIndex: Int? {
+    windows.first(where: \.isActive)?.index
   }
   var tmuxWindowGroups: [TmuxWindowGroup] {
     makeWindowGroups(from: windows)
