@@ -302,11 +302,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
         return true
       }
 
-      if event.matchesShortcutKey("n") {
-        createTmuxWindow()
-        return true
-      }
-
       return forwardTabShortcutToTerminal(with: event)
     }
 
@@ -1251,7 +1246,6 @@ private extension NSEvent {
     "j": 38,
     "k": 40,
     "l": 37,
-    "n": 45,
     "w": 13
   ]
 }
