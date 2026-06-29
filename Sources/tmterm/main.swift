@@ -307,11 +307,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
         return true
       }
 
-      if let number = event.shortcutNumber {
-        selectTmuxWindow(index: number)
-        return true
-      }
-
       return forwardTabShortcutToTerminal(with: event)
     }
 
@@ -1251,17 +1246,6 @@ private extension NSEvent {
     return keyCode == Self.shortcutKeyCodes[key]
   }
 
-  var shortcutNumber: Int? {
-    if let characters = charactersIgnoringModifiers,
-       characters.count == 1,
-       let value = Int(characters)
-    {
-      return value
-    }
-
-    return Self.shortcutNumberKeyCodes[keyCode]
-  }
-
   private static let shortcutKeyCodes: [String: UInt16] = [
     "h": 4,
     "j": 38,
@@ -1269,19 +1253,6 @@ private extension NSEvent {
     "l": 37,
     "n": 45,
     "w": 13
-  ]
-
-  private static let shortcutNumberKeyCodes: [UInt16: Int] = [
-    29: 0,
-    18: 1,
-    19: 2,
-    20: 3,
-    21: 4,
-    23: 5,
-    22: 6,
-    26: 7,
-    28: 8,
-    25: 9
   ]
 }
 

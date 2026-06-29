@@ -31,7 +31,6 @@ Commands:
 - `Ctrl-W n`: new tab
 - `Ctrl-W h` / `Ctrl-W l`: move between directory groups
 - `Ctrl-W j` / `Ctrl-W k`: move within a directory group
-- `Ctrl-W 0` ... `Ctrl-W 9`: select tmux window by index
 
 ## Configuration
 
