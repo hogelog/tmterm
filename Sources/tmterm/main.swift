@@ -702,7 +702,6 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private let markedTextView = MarkedTextOverlayView(frame: .zero)
   private var markedText: NSAttributedString?
   private var markedSelectedRange = NSRange(location: 0, length: 0)
-  private var nativeCaretColorsBeforeMarkedText: (caretColor: NSColor, caretTextColor: NSColor?)?
   private var preciseScrollRemainder: CGFloat = 0
   var onSelectionChanged: ((Bool) -> Void)?
 
@@ -717,8 +716,6 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   }
 
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
-
     guard let attributedText = Self.attributedString(from: string), attributedText.length > 0 else {
       clearMarkedText()
       return
@@ -726,11 +723,10 @@ final class TmtermTerminalView: LocalProcessTerminalView {
 
     markedText = attributedText
     markedSelectedRange = Self.caretRange(from: selectedRange, textLength: attributedText.length)
-    hideNativeCaretForMarkedText()
     markedTextView.text = attributedText.string
     markedTextView.font = font
     markedTextView.cellSize = currentCellSize()
-    markedTextView.backgroundColor = backgroundColorAtCursor()
+    markedTextView.foregroundColor = nativeForegroundColor
     markedTextView.caretX = markedTextView.width(forTextUpToUTF16Offset: markedSelectedRange.location)
     markedTextView.isHidden = false
 
@@ -822,6 +818,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
       .backgroundColor,
       .foregroundColor,
       .font,
+      .markedClauseSegment,
       .underlineColor,
       .underlineStyle
     ]
@@ -840,30 +837,9 @@ final class TmtermTerminalView: LocalProcessTerminalView {
   private func clearMarkedText() {
     markedText = nil
     markedSelectedRange = NSRange(location: 0, length: 0)
-    restoreNativeCaretAfterMarkedText()
     markedTextView.text = ""
     markedTextView.caretX = 0
     markedTextView.isHidden = true
-  }
-
-  private func hideNativeCaretForMarkedText() {
-    guard nativeCaretColorsBeforeMarkedText == nil else {
-      return
-    }
-
-    nativeCaretColorsBeforeMarkedText = (caretColor, caretTextColor)
-    caretColor = .clear
-    caretTextColor = .clear
-  }
-
-  private func restoreNativeCaretAfterMarkedText() {
-    guard let nativeCaretColorsBeforeMarkedText else {
-      return
-    }
-
-    caretColor = nativeCaretColorsBeforeMarkedText.caretColor
-    caretTextColor = nativeCaretColorsBeforeMarkedText.caretTextColor
-    self.nativeCaretColorsBeforeMarkedText = nil
   }
 
   private func updateMarkedTextViewFrame() {
@@ -923,84 +899,6 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     )
   }
 
-  private func backgroundColorAtCursor() -> NSColor {
-    guard let charData = terminal.getCharData(col: terminal.buffer.x, row: terminal.buffer.y) else {
-      return nativeBackgroundColor
-    }
-
-    return nsColor(forBackground: charData.attribute.bg)
-  }
-
-  private func nsColor(forBackground color: Attribute.Color) -> NSColor {
-    switch color {
-    case .defaultColor, .defaultInvertedColor:
-      return nativeBackgroundColor
-    case .ansi256(let code):
-      return Self.nsColor(forAnsi256: code, defaultBackground: nativeBackgroundColor)
-    case .trueColor(let red, let green, let blue):
-      return NSColor(
-        deviceRed: CGFloat(red) / 255.0,
-        green: CGFloat(green) / 255.0,
-        blue: CGFloat(blue) / 255.0,
-        alpha: 1.0
-      )
-    }
-  }
-
-  private static func nsColor(forAnsi256 code: UInt8, defaultBackground: NSColor) -> NSColor {
-    let index = Int(code)
-    if index < defaultAnsiColors.count {
-      return defaultAnsiColors[index]
-    }
-
-    if (16...231).contains(index) {
-      let value = index - 16
-      let red = value / 36
-      let green = (value / 6) % 6
-      let blue = value % 6
-      return NSColor(
-        deviceRed: CGFloat(ansiColorCubeValue(red)) / 255.0,
-        green: CGFloat(ansiColorCubeValue(green)) / 255.0,
-        blue: CGFloat(ansiColorCubeValue(blue)) / 255.0,
-        alpha: 1.0
-      )
-    }
-
-    if (232...255).contains(index) {
-      let gray = CGFloat(8 + ((index - 232) * 10)) / 255.0
-      return NSColor(deviceWhite: gray, alpha: 1.0)
-    }
-
-    return defaultBackground
-  }
-
-  private static func ansiColorCubeValue(_ value: Int) -> Int {
-    value == 0 ? 0 : 55 + (value * 40)
-  }
-
-  private static let defaultAnsiColors = [
-    nsColor(red: 9, green: 11, blue: 13),
-    nsColor(red: 226, green: 92, blue: 87),
-    nsColor(red: 128, green: 210, blue: 112),
-    nsColor(red: 232, green: 185, blue: 85),
-    nsColor(red: 102, green: 162, blue: 235),
-    nsColor(red: 198, green: 128, blue: 230),
-    nsColor(red: 89, green: 204, blue: 216),
-    nsColor(red: 218, green: 224, blue: 232),
-    nsColor(red: 112, green: 122, blue: 134),
-    nsColor(red: 246, green: 113, blue: 106),
-    nsColor(red: 154, green: 232, blue: 132),
-    nsColor(red: 249, green: 205, blue: 105),
-    nsColor(red: 125, green: 184, blue: 255),
-    nsColor(red: 218, green: 154, blue: 246),
-    nsColor(red: 111, green: 226, blue: 238),
-    nsColor(red: 244, green: 247, blue: 250)
-  ]
-
-  private static func nsColor(red: CGFloat, green: CGFloat, blue: CGFloat) -> NSColor {
-    NSColor(deviceRed: red / 255.0, green: green / 255.0, blue: blue / 255.0, alpha: 1.0)
-  }
-
   private static func attributedString(from value: Any) -> NSAttributedString? {
     if let attributedString = value as? NSAttributedString {
       return attributedString
@@ -1032,9 +930,21 @@ private final class MarkedTextOverlayView: NSView {
       needsDisplay = true
     }
   }
-  var font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-  var cellSize = NSSize(width: 8, height: 16)
-  var backgroundColor = NSColor.black
+  var font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular) {
+    didSet {
+      needsDisplay = true
+    }
+  }
+  var cellSize = NSSize(width: 8, height: 16) {
+    didSet {
+      needsDisplay = true
+    }
+  }
+  var foregroundColor = NSColor.white {
+    didSet {
+      needsDisplay = true
+    }
+  }
   var caretX: CGFloat = 0 {
     didSet {
       needsDisplay = true
@@ -1043,6 +953,10 @@ private final class MarkedTextOverlayView: NSView {
 
   override var isFlipped: Bool {
     true
+  }
+
+  override var isOpaque: Bool {
+    false
   }
 
   override var fittingSize: NSSize {
@@ -1076,9 +990,6 @@ private final class MarkedTextOverlayView: NSView {
       return
     }
 
-    backgroundColor.setFill()
-    bounds.fill()
-
     NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.86, alpha: 0.85).setStroke()
     let underlineY = bounds.maxY - 1
     let underlineWidth = min(bounds.maxX, textSize.width)
@@ -1090,22 +1001,28 @@ private final class MarkedTextOverlayView: NSView {
 
     let attributes: [NSAttributedString.Key: Any] = [
       .font: font,
-      .foregroundColor: NSColor(calibratedWhite: 1.0, alpha: 1.0)
+      .foregroundColor: foregroundColor
     ]
+    let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1
+    let verticalOffset = -1 / scale
     var x: CGFloat = 0
     for character in text.composedCharacters {
       let columnWidth = Self.columnWidth(of: character)
+      let slotWidth = CGFloat(columnWidth) * cellSize.width
+      let horizontalOffset = columnWidth >= 2
+        ? Self.horizontalOffset(for: character, font: font, slotWidth: slotWidth)
+        : 0
       let characterRect = NSRect(
-        x: x,
-        y: 0,
-        width: CGFloat(columnWidth) * cellSize.width,
+        x: x + horizontalOffset,
+        y: verticalOffset,
+        width: max(0, slotWidth - horizontalOffset),
         height: bounds.height
       )
       (character as NSString).draw(in: characterRect, withAttributes: attributes)
-      x += CGFloat(columnWidth) * cellSize.width
+      x += slotWidth
     }
 
-    NSColor(calibratedWhite: 1.0, alpha: 1.0).setFill()
+    foregroundColor.setFill()
     NSRect(x: min(bounds.maxX - 1, caretX), y: 1, width: 1, height: max(0, bounds.height - 2)).fill()
   }
 
@@ -1125,6 +1042,19 @@ private final class MarkedTextOverlayView: NSView {
     }
 
     return isWide(scalar) ? 2 : 1
+  }
+
+  private static func horizontalOffset(for character: String, font: NSFont, slotWidth: CGFloat) -> CGFloat {
+    guard slotWidth > 0 else {
+      return 0
+    }
+
+    let naturalWidth = (character as NSString).size(withAttributes: [.font: font]).width
+    guard naturalWidth > 0, naturalWidth < slotWidth else {
+      return 0
+    }
+
+    return (slotWidth - naturalWidth) / 2
   }
 
   private static func isWide(_ scalar: Unicode.Scalar) -> Bool {
