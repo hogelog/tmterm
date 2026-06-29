@@ -1,4 +1,5 @@
 {
+  "originHash" : "ecaf16aa78ba8c989469bbec76b645c480e0c625b6de22222d910237810764cc",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -12,12 +13,12 @@
     {
       "identity" : "swiftterm",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/migueldeicaza/SwiftTerm",
+      "location" : "https://github.com/hogelog/SwiftTerm",
       "state" : {
-        "revision" : "8e7a1e154f470e19c709a00a8768df348ba5fc43",
-        "version" : "1.13.0"
+        "branch" : "fix-skip-zero-width-cells",
+        "revision" : "308a5068ba6c70780a9ba130d0385b19791ed01d"
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

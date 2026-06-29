@@ -11,7 +11,7 @@ let package = Package(
     .executable(name: "tmterm", targets: ["tmterm"])
   ],
   dependencies: [
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.13.0")
+    .package(url: "https://github.com/hogelog/SwiftTerm", branch: "fix-skip-zero-width-cells")
   ],
   targets: [
     .executableTarget(
