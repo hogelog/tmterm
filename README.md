@@ -14,8 +14,8 @@ tabs by their current directory.
 
 ## Shortcuts
 
-- `Ctrl-W h` / `Ctrl-W l`: move between directory groups
-- `Ctrl-W j` / `Ctrl-W k`: move within a directory group
+- `C-b h` / `C-b l`: move between directory groups
+- `C-b j` / `C-b k`: move within a directory group
 
 ## Configuration
 
@@ -23,6 +23,15 @@ tmterm reads tmux settings from `tmuxConfigPath` in
 `~/.config/tmterm/config.json` when configured. Otherwise, tmux uses its normal
 configuration loading. tmterm keeps tmux's status line hidden because tmux
 windows are rendered with the native tab bar.
+
+tmterm's tab shortcut prefix defaults to tmux's default `C-b`. Configure it with
+`prefix`:
+
+```json
+{
+  "prefix": "C-o"
+}
+```
 
 ## Development
 

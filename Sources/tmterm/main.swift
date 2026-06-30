@@ -5,6 +5,7 @@ import SwiftTerm
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalProcessTerminalViewDelegate, NSWindowDelegate {
   private let tmuxSessionName = ProcessInfo.processInfo.environment["TMTERM_TMUX_SESSION"] ?? "tmterm"
   private var config = AppConfig.load()
+  private lazy var tabShortcutPrefix = TabShortcutPrefix(configValue: config.prefix)
   private lazy var tmuxSocketPath: String = {
     let directory = FileManager.default
       .homeDirectoryForCurrentUser
@@ -325,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
       return forwardTabShortcutToTerminal(with: event)
     }
 
-    if event.modifierFlags.normalized.contains(.control), event.matchesShortcutKey("w") {
+    if tabShortcutPrefix.matches(event) {
       isWaitingForTabShortcut = true
       return true
     }
@@ -344,7 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     if tmuxKeyName == "[" {
       terminalView?.selectNone()
     }
-    runTmux(arguments: ["send-keys", "-K", "-c", tmuxClientName, "C-w", tmuxKeyName])
+    runTmux(arguments: ["send-keys", "-K", "-c", tmuxClientName, tabShortcutPrefix.tmuxKeyName, tmuxKeyName])
     return true
   }
 
@@ -626,8 +627,63 @@ struct TmuxWindowGroup: Equatable {
   let windows: [TmuxWindow]
 }
 
+private struct TabShortcutPrefix {
+  static let defaultValue = TabShortcutPrefix(key: "b", tmuxKeyName: "C-b")
+
+  let key: String
+  let tmuxKeyName: String
+
+  init(configValue: String?) {
+    guard let configValue, !configValue.isEmpty else {
+      self = Self.defaultValue
+      return
+    }
+
+    guard let parsed = Self.parse(configValue) else {
+      NSLog("Invalid tmterm prefix '\(configValue)'; falling back to \(Self.defaultValue.tmuxKeyName)")
+      self = Self.defaultValue
+      return
+    }
+
+    self = parsed
+  }
+
+  private init(key: String, tmuxKeyName: String) {
+    self.key = key
+    self.tmuxKeyName = tmuxKeyName
+  }
+
+  func matches(_ event: NSEvent) -> Bool {
+    event.modifierFlags.normalized.contains(.control) && event.matchesShortcutKey(key)
+  }
+
+  private static func parse(_ value: String) -> TabShortcutPrefix? {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let key: String
+
+    if normalized.hasPrefix("c-") {
+      key = String(normalized.dropFirst(2))
+    } else if normalized.hasPrefix("ctrl-") {
+      key = String(normalized.dropFirst(5))
+    } else {
+      return nil
+    }
+
+    guard
+      key.unicodeScalars.count == 1,
+      let scalar = key.unicodeScalars.first,
+      (UnicodeScalar("a").value...UnicodeScalar("z").value).contains(scalar.value)
+    else {
+      return nil
+    }
+
+    return TabShortcutPrefix(key: key, tmuxKeyName: "C-\(key)")
+  }
+}
+
 private struct AppConfig: Codable {
   var fontSize: CGFloat?
+  var prefix: String?
   var tmuxConfigPath: String?
   var windowFrame: NSRect? {
     get {
@@ -642,6 +698,7 @@ private struct AppConfig: Codable {
 
   private enum CodingKeys: String, CodingKey {
     case fontSize
+    case prefix
     case tmuxConfigPath
     case windowFrameValue = "windowFrame"
   }
@@ -1395,11 +1452,32 @@ private extension NSEvent {
   }
 
   private static let shortcutKeyCodes: [String: UInt16] = [
+    "a": 0,
+    "b": 11,
+    "c": 8,
+    "d": 2,
+    "e": 14,
+    "f": 3,
+    "g": 5,
     "h": 4,
+    "i": 34,
     "j": 38,
     "k": 40,
     "l": 37,
-    "w": 13
+    "m": 46,
+    "n": 45,
+    "o": 31,
+    "p": 35,
+    "q": 12,
+    "r": 15,
+    "s": 1,
+    "t": 17,
+    "u": 32,
+    "v": 9,
+    "w": 13,
+    "x": 7,
+    "y": 16,
+    "z": 6
   ]
 
   private static let imeConversionFunctionKeyCodes: Set<UInt16> = [
