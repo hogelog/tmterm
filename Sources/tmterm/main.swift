@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
   private var isWaitingForTabShortcut = false
   private var tabShortcutMonitor: Any?
   private var scrollWheelMonitor: Any?
+  private var linkPointerMonitor: Any?
   private var tabRefreshTimer: Timer?
   private var tmuxExecutable: String?
   private var window: NSWindow?
@@ -87,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     startTmux()
     installTabShortcutMonitor()
     installScrollWheelMonitor()
+    installLinkPointerMonitor()
     refreshTabs(force: true)
     tabRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
       Task { @MainActor in
@@ -102,6 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
     }
     if let scrollWheelMonitor {
       NSEvent.removeMonitor(scrollWheelMonitor)
+    }
+    if let linkPointerMonitor {
+      NSEvent.removeMonitor(linkPointerMonitor)
     }
     tabRefreshTimer?.invalidate()
     terminalView?.terminate()
@@ -267,6 +272,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency LocalP
       return terminalView.handleNativeScrollWheel(event) { lines in
         self.scrollTmux(lines: lines)
       } ? nil : event
+    }
+  }
+
+  private func installLinkPointerMonitor() {
+    linkPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .mouseMoved, .mouseExited, .cursorUpdate]) { [weak self] event in
+      guard
+        let self,
+        self.terminalView?.window?.isKeyWindow == true,
+        let terminalView = self.terminalView as? TmtermTerminalView
+      else {
+        return event
+      }
+
+      terminalView.handleLinkPointerEvent(event)
+      return event
     }
   }
 
@@ -730,6 +750,19 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     super.hideCursor(source: source)
   }
 
+  func handleLinkPointerEvent(_ event: NSEvent) {
+    switch event.type {
+    case .flagsChanged:
+      updateLinkPointerForCurrentMouse(modifiers: event.modifierFlags)
+    case .mouseMoved, .cursorUpdate:
+      updateLinkPointer(locationInWindow: event.locationInWindow, modifiers: event.modifierFlags)
+    case .mouseExited:
+      NSCursor.iBeam.set()
+    default:
+      break
+    }
+  }
+
   override func insertText(_ string: Any, replacementRange: NSRange) {
     clearMarkedText()
     super.insertText(string, replacementRange: replacementRange)
@@ -863,6 +896,53 @@ final class TmtermTerminalView: LocalProcessTerminalView {
     markedTextView.text = ""
     markedTextView.caretX = 0
     markedTextView.isHidden = true
+  }
+
+  private func updateLinkPointerForCurrentMouse(modifiers: NSEvent.ModifierFlags) {
+    guard let window else {
+      NSCursor.iBeam.set()
+      return
+    }
+
+    updateLinkPointer(locationInWindow: window.mouseLocationOutsideOfEventStream, modifiers: modifiers)
+  }
+
+  private func updateLinkPointer(locationInWindow: NSPoint, modifiers: NSEvent.ModifierFlags) {
+    if isLinkPointerTarget(locationInWindow: locationInWindow, modifiers: modifiers) {
+      NSCursor.pointingHand.set()
+    } else {
+      NSCursor.iBeam.set()
+    }
+  }
+
+  private func isLinkPointerTarget(locationInWindow: NSPoint, modifiers: NSEvent.ModifierFlags) -> Bool {
+    guard modifiers.normalized.contains(.command),
+          let position = terminalScreenPosition(locationInWindow: locationInWindow)
+    else {
+      return false
+    }
+
+    return terminal.link(at: .screen(position), mode: .explicitAndImplicit) != nil
+  }
+
+  private func terminalScreenPosition(locationInWindow: NSPoint) -> Position? {
+    let point = convert(locationInWindow, from: nil)
+    guard bounds.contains(point) else {
+      return nil
+    }
+
+    let cellSize = currentCellSize()
+    guard cellSize.width > 0, cellSize.height > 0 else {
+      return nil
+    }
+
+    let col = Int(point.x / cellSize.width)
+    let row = Int((bounds.height - point.y) / cellSize.height)
+    guard col >= 0, col < terminal.cols, row >= 0, row < terminal.rows else {
+      return nil
+    }
+
+    return Position(col: col, row: row)
   }
 
   private func hideNativeCaretForMarkedText() {
