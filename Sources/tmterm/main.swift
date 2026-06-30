@@ -796,7 +796,7 @@ final class TmtermTerminalView: LocalProcessTerminalView {
       return false
     }
 
-    if event.keyCode == Self.deleteKeyCode || event.isMarkedTextEditingControlKey {
+    if event.keyCode == Self.deleteKeyCode || event.isMarkedTextEditingKey {
       _ = inputContext?.handleEvent(event)
       return true
     }
@@ -1357,12 +1357,14 @@ private extension String {
 }
 
 private extension NSEvent {
-  var isMarkedTextEditingControlKey: Bool {
-    guard modifierFlags.normalized.contains(.control) else {
-      return false
-    }
+  var isMarkedTextEditingKey: Bool {
+    isMarkedTextEditingControlKey || Self.imeConversionFunctionKeyCodes.contains(keyCode)
+  }
 
-    return ["a", "b", "e", "f", "h"].contains { matchesShortcutKey($0) }
+  private var isMarkedTextEditingControlKey: Bool {
+    modifierFlags.normalized.contains(.control) && ["a", "b", "e", "f", "h"].contains {
+      matchesShortcutKey($0)
+    }
   }
 
   var tmuxKeyName: String? {
@@ -1398,6 +1400,10 @@ private extension NSEvent {
     "k": 40,
     "l": 37,
     "w": 13
+  ]
+
+  private static let imeConversionFunctionKeyCodes: Set<UInt16> = [
+    97, 98, 100, 101, 109
   ]
 }
 
