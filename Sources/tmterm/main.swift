@@ -628,7 +628,7 @@ struct TmuxWindowGroup: Equatable {
 }
 
 private struct TabShortcutPrefix {
-  static let defaultValue = TabShortcutPrefix(key: "b", tmuxKeyName: "C-b")
+  static let defaultValue = TabShortcutPrefix(key: "w", tmuxKeyName: "C-w")
 
   let key: String
   let tmuxKeyName: String
